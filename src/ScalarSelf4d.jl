@@ -3,12 +3,16 @@ module ScalarSelf4d
 using HCubature
 using LinearAlgebra
 using QuadGK
+using StaticArrays
 using TensorOperations
-# using StaticArrays
 
 
 
-# Linear interpolation 
+################################################################################
+
+# Miscallaneous utilities
+
+# Linear interpolation
 export linear
 function linear(x0::T, y0::U, x1::T, y1::U, x::T)::U where
         {T<:Number, U<:Number}
@@ -17,8 +21,12 @@ end
 
 
 
+################################################################################
+
+# Efficient small vectors
+
 export Vec
-struct Vec{D, T} <: DenseArray{T, 1}
+struct Vec{D, T} <: Number      # DenseArray{T, 1}
     elts::NTuple{D, T}
 end
 
@@ -37,7 +45,7 @@ function Base.length(x::Vec{D,T})::Int where {D, T}
     D
 end
 
-function Base.getindex(x::Vec{D,T}, d)::T where {D, T}
+function Base.getindex(x::Vec{D,T}, d::Integer)::T where {D, T}
     getindex(x.elts, d)
 end
 
@@ -57,6 +65,13 @@ function Base.:+(x::Vec{D,T}, y::Vec{D,T})::Vec{D,T} where {D, T<:Number}
 end
 function Base.:-(x::Vec{D,T}, y::Vec{D,T})::Vec{D,T} where {D, T<:Number}
     Vec{D,T}(x.elts .- y.elts)
+end
+
+function Base.:+(x::Vec{D,T}, y::T)::Vec{D,T} where {D, T<:Number}
+    x + Vec(ntuple(d -> y, D))
+end
+function Base.:-(x::Vec{D,T}, y::T)::Vec{D,T} where {D, T<:Number}
+    x - Vec(ntuple(d -> y, D))
 end
 
 function Base.:*(a::T, x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
@@ -93,6 +108,25 @@ function Base.:>(x::Vec{D,T}, y::Vec{D,T})::Vec{D,Bool} where {D, T<:Number}
 end
 function Base.:>=(x::Vec{D,T}, y::Vec{D,T})::Vec{D,Bool} where {D, T<:Number}
     Vec{D,Bool}(ntuple(d -> x.elts[d] >= y.elts[d], D))
+end
+
+function Base.:(==)(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
+    Vec{D,Bool}(ntuple(d -> x.elts[d] == y, D))
+end
+function Base.:!=(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
+    Vec{D,Bool}(ntuple(d -> x.elts[d] != y, D))
+end
+function Base.:<(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
+    Vec{D,Bool}(ntuple(d -> x.elts[d] < y, D))
+end
+function Base.:<=(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
+    Vec{D,Bool}(ntuple(d -> x.elts[d] <= y, D))
+end
+function Base.:>(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
+    Vec{D,Bool}(ntuple(d -> x.elts[d] > y, D))
+end
+function Base.:>=(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
+    Vec{D,Bool}(ntuple(d -> x.elts[d] >= y, D))
 end
 
 function Base.:~(x::Vec{D,Bool})::Vec{D,Bool} where {D}
@@ -135,16 +169,21 @@ end
 
 
 
+################################################################################
+
+# Run-time parameters
+
 export Par
 struct Par{D,T<:Number}
-    n::Int
+    n::Vec{D,Int}
     xmin::Vec{D,T}
     xmax::Vec{D,T}
 end
 
 function (::Type{Par{D,T}})(n::Int) where {D, T}
-    Par{D,T}(n, Vec{D,T}(ntuple(d -> d<4 ? -1 : 0, D)),
-                Vec{D,T}(ntuple(d -> 1, D)))
+    Par{D,T}(Vec{D,Int}(ntuple(d -> n, D)),
+             Vec{D,T}(ntuple(d -> d<4 ? -1 : 0, D)),
+             Vec{D,T}(ntuple(d -> 1, D)))
 end
 
 function (::Type{Par{T}})(n::Int) where {T}
@@ -153,68 +192,44 @@ end
 
 
 
+################################################################################
+
+# Basis functions and collocation points
+
+# Coordinates of collocation points
 export coords
-
 function coords(par::Par{D,T}, d::Int)::Vector{T} where {D, T<:Number}
-    T[linear(1, par.xmin[d], par.n, par.xmax[d], i) for i in 1:par.n]
+    T[linear(1, par.xmin[d], par.n[d], par.xmax[d], i) for i in 1:par.n[d]]
 end
-
 function coords(par::Par{D,T})::NTuple{D, Vector{T}} where {D, T<:Number}
     ntuple(d -> coords(par, d) for d in 1:D)
 end
 
-
-
+# Basis functions
 export basis
-
 function basis(par::Par{D,T}, d::Int, i::Int, x::T)::T where {D, T<:Number}
-    @assert i>=0 && i<par.n
-    fm = linear(par.xmin[d], T(1 - i), par.xmax[d], T(1 + par.n - 1 - i), x)
-    fp = linear(par.xmin[d], T(1 + i), par.xmax[d], T(1 - (par.n - 1 - i)), x)
+    @assert i>=0 && i<par.n[d]
+    fm = linear(par.xmin[d], T(1 - i), par.xmax[d], T(1 + par.n[d] - 1 - i), x)
+    fp = linear(par.xmin[d], T(1 + i), par.xmax[d], T(1 - par.n[d] + 1 + i), x)
     f0 = T(0)
     max(f0, min(fm, fp))
 end
-
 function basis(par::Par{D,T}, i::Vec{D,Int}, x::Vec{D,T})::T where
         {D, T<:Number}
     prod(basis(par, d, i[d], x[d]) for d in 1:D)
 end
 
-
-
-export value
-
-function value(par::Par{D,T}, d::Int, cs::Vector{U}, x::T)::U where
-        {D, T<:Number, U<:Number}
-    f = U(0)
-    for i in 0:par.n-1
-        f += cs[i+1] * basis(par, d, i, x)
-    end
-    f
-end
-
-function value(par::Par{D,T}, cs::Array{U,D}, x::Vec{D,T})::U where
-        {D, T<:Number, U<:Number}
-    nc = CartesianIndex(ntuple(d -> par.n, D))
-    f = U(0)
-    for ic in CartesianIndices(nc)
-        i = Vec(ic.I) - vec1(Val(D), 1)
-        f += cs[ic] * basis(par, i, x)
-    end
-    f
-end
-
-
-
+# Dot product between basis functions
 function dot_basis(par::Par{D,T}, d::Int, i::Int, j::Int)::T where
         {D, T<:Number}
-    @assert i>=0 && i<par.n
-    @assert j>=0 && j<par.n
-    dx = (par.xmax[d] - par.xmin[d]) / (par.n - 1)
+    n = par.n[d]
+    @assert i>=0 && i<n
+    @assert j>=0 && j<n
+    dx = (par.xmax[d] - par.xmin[d]) / (n - 1)
     if j == i-1
         return dx/6
     elseif j == i
-        if i == 0 || i == par.n-1
+        if i == 0 || i == n-1
             return dx/3
         else
             return 2*dx/3
@@ -228,63 +243,60 @@ end
 
 
 
-export project_basis
+################################################################################
 
-function project_basis(fun, ::Type{U}, par::Par{D,T}, d::Int)::Vector{U} where
-        {D, T<:Number, U<:Number}
-    dv = [dot_basis(par, d, i, i) for i in 0:par.n-1]
-    ev = [dot_basis(par, d, i, i+1) for i in 0:par.n-2]
-    W = SymTridiagonal(dv, ev)
+# Discretized functions
 
-    fs = Vector{U}(undef, par.n)
-    for i in 0:par.n-1
-        x0 = linear(0, par.xmin[d], par.n-1, par.xmax[d], i - 1)
-        xc = linear(0, par.xmin[d], par.n-1, par.xmax[d], i)
-        x1 = linear(0, par.xmin[d], par.n-1, par.xmax[d], i + 1)
-        f = U(0)
-        if i - 1 >= 0
-            r, e = quadgk(x -> fun(x) * basis(par, d, i, x), x0, xc)
-            f += r
-        end
-        if i + 1 < par.n
-            r, e = quadgk(x -> fun(x) * basis(par, d, i, x), xc, x1)
-            f += r
-        end
-        fs[i+1] = f
-    end
-    W \ fs
+export Fun
+struct Fun{D,T,U}
+    par::Par{D,T}
+    coeffs::Array{U,D}
 end
 
-function project_basis(fun, ::Type{U}, par::Par{D,T})::Array{U,D} where
-        {D, T<:Number, U<:Number}
-    Winvs = ntuple(D) do d
-        dv = [dot_basis(par, d, i, i) for i in 0:par.n-1]
-        ev = [dot_basis(par, d, i, i+1) for i in 0:par.n-2]
-        W = SymTridiagonal(dv, ev)
-        inv(W)
+# Evaluate a function
+function (fun::Fun{D,T,U})(x::Vec{D,T})::U where {D,T,U}
+    f = U(0)
+    for ic in CartesianIndices(size(fun.coeffs))
+        i = Vec(ic.I) - 1
+        f += fun.coeffs[ic] * basis(fun.par, i, x)
     end
+    f
+end
 
-    nc = CartesianIndex(ntuple(d -> par.n, D))
-    fs = Array{U,D}(undef, nc.I)
-    for ic in CartesianIndices(nc)
+# Create a discretized function by projecting onto the basis functions
+export approximate
+function approximate(fun, ::Type{U}, par::Par{D,T})::Fun{D,U} where
+        {D, T<:Number, U<:Number}
+    fs = Array{U,D}(undef, par.n.elts)
+    for ic in CartesianIndices(size(fs))
+        i = Vec(ic.I) - 1
         f = U(0)
+        # Integrate piecewise
         for jc in CartesianIndices(ntuple(d -> 0:1, D))
-            i = Vec(ic.I) - vec1(Val(D), 1)
-            ij = i + Vec(jc.I) - vec1(Val(D), 1)
-            if all(ij >= vec1(Val(D), 0)) && all(ij < vec1(Val(D), par.n - 1))
-                x0 = Vec{D,T}(ntuple(d -> linear(0, par.xmin[d],
-                                           par.n-1, par.xmax[d], ij[d]), D))
-                x1 = Vec{D,T}(ntuple(d -> linear(0, par.xmin[d],
-                                           par.n-1, par.xmax[d], ij[d]+1), D))
-                function g(x0)
-                    x = Vec{D,T}(Tuple(x0))
+            ij = i + Vec(jc.I) - 1
+            if all(ij >= 0) && all(ij < par.n - 1)
+                x0 = Vec{D,T}(ntuple(d -> linear(
+                    0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]), D))
+                x1 = Vec{D,T}(ntuple(d -> linear(
+                    0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]+1), D))
+                function kernel(x0::SVector{D,T})::U
+                    x = Vec(Tuple(x0))
                     U(fun(x)) * U(basis(par, i, x))
                 end
-                r, e = hcubature(g, x0, x1)
+                r, e = hcubature(kernel,
+                                 SVector{D,T}(x0.elts), SVector{D,T}(x1.elts))
                 f += r
             end
         end
         fs[ic] = f
+    end
+
+    Winvs = ntuple(D) do d
+        # We know the overlaps of the support of the basis functions
+        dv = [dot_basis(par, d, i, i) for i in 0:par.n[d]-1]
+        ev = [dot_basis(par, d, i, i+1) for i in 0:par.n[d]-2]
+        W = SymTridiagonal(dv, ev)
+        inv(W)
     end
 
     if D == 1
@@ -292,26 +304,87 @@ function project_basis(fun, ::Type{U}, par::Par{D,T})::Array{U,D} where
         @tensor begin
             cs[i1] := Winv1[i1,j1] * fs[j1]
         end
-        return cs
     elseif D == 2
         Winv1 = Winvs[1]
         Winv2 = Winvs[2]
         @tensor begin
             cs[i1,i2] := Winv1[i1,j1] * Winv2[i2,j2] * fs[j1,j2]
         end
-        return cs
     elseif D == 3
         Winv1 = Winvs[1]
         Winv2 = Winvs[2]
         Winv3 = Winvs[3]
         @tensor begin
             cs[i1,i2,i3] :=
-                Winv1[i1,j1] * Winv2[i2,j2] * Winv2[i3,j3] * fs[j1,j2,j3]
+                Winv1[i1,j1] * Winv2[i2,j2] * Winv3[i3,j3] * fs[j1,j2,j3]
         end
-        return cs
+    elseif D == 4
+        Winv1 = Winvs[1]
+        Winv2 = Winvs[2]
+        Winv3 = Winvs[3]
+        Winv4 = Winvs[4]
+        @tensor begin
+            cs[i1,i2,i3,i4] :=
+                (Winv1[i1,j1] * Winv2[i2,j2] * Winv3[i3,j3] * Winv4[i4,j4] *
+                fs[j1,j2,j3,j4])
+        end
     else
         @assert false
     end
+    return Fun{D,T,U}(par, cs)
+end
+
+# Approximate a delta function
+export approximate_delta
+function approximate_delta(::Type{U}, par::Par{D,T}, x::T)::Vector{U} where
+        {D, T<:Number, U<:Number}
+    fs = Array{U,D}(undef, par.n.elts)
+    for ic in CartesianIndices(size(fs))
+        i = Vec(ic.I) - 1
+        fs[ic] = U(basis(par, i, x))
+    end
+
+    Winvs = ntuple(D) do d
+        # We know the overlaps of the support of the basis functions
+        dv = [dot_basis(par, d, i, i) for i in 0:par.n[d]-1]
+        ev = [dot_basis(par, d, i, i+1) for i in 0:par.n[d]-2]
+        W = SymTridiagonal(dv, ev)
+        inv(W)
+    end
+
+    if D == 1
+        Winv1 = Winvs[1]
+        @tensor begin
+            cs[i1] := Winv1[i1,j1] * fs[j1]
+        end
+    elseif D == 2
+        Winv1 = Winvs[1]
+        Winv2 = Winvs[2]
+        @tensor begin
+            cs[i1,i2] := Winv1[i1,j1] * Winv2[i2,j2] * fs[j1,j2]
+        end
+    elseif D == 3
+        Winv1 = Winvs[1]
+        Winv2 = Winvs[2]
+        Winv3 = Winvs[3]
+        @tensor begin
+            cs[i1,i2,i3] :=
+                Winv1[i1,j1] * Winv2[i2,j2] * Winv3[i3,j3] * fs[j1,j2,j3]
+        end
+    elseif D == 4
+        Winv1 = Winvs[1]
+        Winv2 = Winvs[2]
+        Winv3 = Winvs[3]
+        Winv4 = Winvs[4]
+        @tensor begin
+            cs[i1,i2,i3,i4] :=
+                (Winv1[i1,j1] * Winv2[i2,j2] * Winv3[i3,j3] * Winv4[i4,j4] *
+                fs[j1,j2,j3,j4])
+        end
+    else
+        @assert false
+    end
+    return Fun{D,T,U}(par, cs)
 end
 
 
