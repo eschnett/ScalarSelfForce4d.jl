@@ -232,7 +232,7 @@ function dot_basis(par::Par{D,T}, d::Int, i::Int, j::Int)::T where
         if i == 0 || i == n-1
             return dx/3
         else
-            return 2*dx/3
+            return T(2)/3*dx
         end
     elseif j == i+1
         return dx/6
@@ -389,38 +389,117 @@ end
 
 
 
-export deriv, deriv2
+################################################################################
 
-function deriv(par::Par{D,T}, d::Int, f::AbstractArray{T,1},
-        df::AbstractArray{T,1})::Nothing where {D, T<:Number}
-    dx = (par.xmax[d] - par.xmin[d]) / (par.n - 1)
-    df[1] = (f[2] - f[1]) / dx
-    for i in 2:par.n-1
-        df[i] = (f[i+1] - f[i-1]) / (2*dx)
-    end
-    df[par.n] = (f[par.n] - f[par.n - 1]) / dx
-end
-function deriv(par::Par{D,T}, f::AbstractArray{T,1}, d::Int) where
+# Derivatives
+
+# Derivative of basis functions   dϕ^i/dϕ^j
+function deriv_basis(par::Par{D,T}, d::Int, i::Int, j::Int)::T where
         {D, T<:Number}
-    df = similar(f)
-    deriv(par, d, f, df)
-    df
+    dx = (fun.par.xmax[d] - fun.par.xmin[d]) / (fun.par.n[d] - 1)
+    if i == 0
+        if j == i
+            return -1/dx
+        elseif j == i+1
+            return 1/dx
+        end
+    elseif i < par.n[d]
+        if j == i-1
+            return -T(1)/2/dx
+        elseif j == i+1
+            return T(1)/2/dx
+        end
+    else
+        if j == i-1
+            return -1/dx
+        elseif j == i
+            return 1/dx
+        end
+    end
+    T(0)
 end
 
-function deriv2(par::Par{D,T}, d::Int, f::AbstractArray{T,1},
-        df::AbstractArray{T,1})::Nothing where {D, T<:Number}
-    dx = (par.xmax[d] - par.xmin[d]) / (par.n - 1)
-    ddf[1] = (f[3] - 2*f[2] + f[1]) / dx^2
-    for i in 2:par.n-1
-        df[i] = (f[i+1] - 2*f[i] + f[i-1]) / dx^2
-    end
-    ddf[par.n] = (f[par.n] - 2*f[par.n-1] + f[par.n-2]) / dx^2
+
+
+export deriv
+function deriv(par::Par{D,T}, d::Int)::Tridiagonal{T} where {D, T<:Number}
+    # We know the overlaps of the support of the basis functions
+    n = par.n[d] - 1
+    dlv = [deriv_basis(par, d, i, i-1) for i in 1:n]
+    dv = [deriv_basis(par, d, i, i) for i in 0:n]
+    duv = [deriv_basis(par, d, i, i+1) for i in 0:n-1]
+    Tridiagonal(dlv, dv, duv)
 end
-function deriv2(par::Par{D,T}, d::Int, f::AbstractArray{T,1}) where
-        {D, T<:Number}
-    ddf = similar(f)
-    deriv2(par, d, f, ddf)
-    ddf
+
+
+
+function deriv(fun::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    @assert 1 <= dir <= D
+    dx = (fun.par.xmax[dir] - fun.par.xmin[dir]) / (fun.par.n[dir] - 1)
+    cs = fun.coeffs
+    dcs = similar(cs)
+    n = size(dcs, dir)
+
+    inner_indices = CartesianIndices(ntuple(d -> size(dcs,d), dir - 1))
+    outer_indices = CartesianIndices(ntuple(d -> size(dcs,dir+d), D - dir))
+
+    for oi in outer_indices
+        for ii in inner_indices
+            dcs[ii,1,oi] = (cs[ii,2,oi] - cs[ii,1,oi]) / dx
+        end
+        for i in 2:n-1
+            for ii in inner_indices
+                dcs[ii,i,oi] = (cs[ii,i+1,oi] - cs[ii,i-1,oi]) / 2dx
+            end
+        end
+        for ii in inner_indices
+            dcs[ii,n,oi] = (cs[ii,n,oi] - cs[ii,n-1,oi]) / dx
+        end
+    end
+
+    Fun{D,T,U}(fun.par, dcs)
+end
+
+export deriv2
+function deriv2(fun::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    @assert 1 <= dir <= D
+    dx2 = ((fun.par.xmax[dir] - fun.par.xmin[dir]) / (fun.par.n[dir] - 1)) ^ 2
+    cs = fun.coeffs
+    dcs = similar(cs)
+    n = size(dcs, dir)
+
+    inner_indices = CartesianIndices(ntuple(d -> size(dcs,d), dir - 1))
+    outer_indices = CartesianIndices(ntuple(d -> size(dcs,dir+d), D - dir))
+
+    for oi in outer_indices
+        for ii in inner_indices
+            dcs[ii,1,oi] = (cs[ii,1,oi] - 2*cs[ii,2,oi] + cs[ii,3,oi]) / dx2
+        end
+        for i in 2:n-1
+            for ii in inner_indices
+                dcs[ii,i,oi] =
+                    (cs[ii,i-1,oi] - 2*cs[ii,i,oi] + cs[ii,i+1,oi]) / dx2
+            end
+        end
+        for ii in inner_indices
+            dcs[ii,n,oi] = (cs[ii,n-2,oi] - 2*cs[ii,n-1,oi] + cs[ii,n,oi]) / dx2
+        end
+    end
+
+    Fun{D,T,U}(fun.par, dcs)
+end
+
+function deriv2(fun::Fun{D,T,U}, dir1::Int, dir2::Int)::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    @assert 1 <= dir1 <= D
+    @assert 1 <= dir2 <= D
+    if dir1 == dir2
+        deriv2(fun, dir1)
+    else
+        deriv(deriv(fun, dir1), dir2)
+    end
 end
 
 end

@@ -1,7 +1,13 @@
 using ScalarSelf4d
 using Test
 
+
+
 const par = Par{3,Float64}(9)
+
+@testset "Parameters" begin
+    @test all(par.n == 9)
+end
 
 
 
@@ -11,16 +17,63 @@ end
 
 const fsinpi = approximate(sinpiD, Float64, par)
 
-function find_maxerr()
-    maxerr = 0.0
-    for z in LinRange(-1.0, 1.0, 11),
-        y in LinRange(-1.0, 1.0, 11),
-        x in LinRange(-1.0, 1.0, 11)
-        f0 = sinpiD(Vec((x, y, z)))
-        f = fsinpi(Vec((x, y, z)))
-        df = f - f0
-        maxerr = max(maxerr, abs(df))
+@testset "Approximation" begin
+    
+    function find_maxerr()
+        maxerr = 0.0
+        for z in LinRange(-1.0, 1.0, 11),
+            y in LinRange(-1.0, 1.0, 11),
+            x in LinRange(-1.0, 1.0, 11)
+            f0 = sinpiD(Vec((x, y, z)))
+            f = fsinpi(Vec((x, y, z)))
+            df = f - f0
+            maxerr = max(maxerr, abs(df))
+        end
+        maxerr
     end
-    maxerr
+    maxerr = find_maxerr()
+    @test 0.05 <= maxerr < 0.06
+    
 end
-@test find_maxerr() < 0.12
+
+
+
+@testset "Derivatives" begin
+    
+    function sinpiDx(x::Vec{D,T})::T where {D,T}
+        pi * cospi(x[1]) * prod(sinpi(x[d]) for d in 2:D)
+    end
+    
+    fsinpix1 = deriv(fsinpi, 1)
+    fsinpix2 = approximate(sinpiDx, Float64, par)
+    
+    maxdiffx = maximum(abs.(fsinpix1.coeffs .- fsinpix2.coeffs))
+    @test 0.42 <= maxdiffx < 0.43
+
+end
+
+
+
+@testset "Second derivatives" begin
+        
+    function sinpiDxx(x::Vec{D,T})::T where {D,T}
+        - pi^2 * sinpi(x[1]) * prod(sinpi(x[d]) for d in 2:D)
+    end
+    
+    fsinpixx1 = deriv2(fsinpi, 1, 1)
+    fsinpixx2 = approximate(sinpiDxx, Float64, par)
+    
+    maxdiffxx = maximum(abs.(fsinpixx1.coeffs .- fsinpixx2.coeffs))
+    @test 7.3 <= maxdiffxx < 7.4
+    
+    function sinpiDxy(x::Vec{D,T})::T where {D,T}
+        pi^2 * cospi(x[1]) * cospi(x[2]) * prod(sinpi(x[d]) for d in 3:D)
+    end
+    
+    fsinpixy1 = deriv2(fsinpi, 1, 2)
+    fsinpixy2 = approximate(sinpiDxy, Float64, par)
+    
+    maxdiffxy = maximum(abs.(fsinpixy1.coeffs .- fsinpixy2.coeffs))
+    @test 2.4 <= maxdiffxy < 2.5
+
+end
