@@ -2,3 +2,11 @@ name = "ScalarSelf4d"
 uuid = "e756a656-3eb7-4864-8d3a-d46f9b7dc51b"
 authors = ["Erik Schnetter <schnetter@gmail.com>"]
 version = "0.1.0"
+
+[deps]
+Gadfly = "c91e804a-d5a3-530f-b6f0-dfbca275c004"
+HCubature = "19dc6840-f33b-545b-b366-655c7e3ffd49"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+TensorOperations = "6aa20fa7-93e2-5fca-9bc0-fbd0db3c71a2"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
