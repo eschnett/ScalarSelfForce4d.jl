@@ -3,6 +3,7 @@ module ScalarSelf4d
 using HCubature
 using LinearAlgebra
 using QuadGK
+using SparseArrays
 using StaticArrays
 using TensorOperations
 
@@ -26,22 +27,43 @@ end
 # Efficient small vectors
 
 export Vec
-struct Vec{D, T} <: Number      # DenseArray{T, 1}
+struct Vec{D, T} <: DenseArray{T, 1}
     elts::NTuple{D, T}
 end
 
 # Vec{D}(x::T) where {D,T} = Vec{D,T}(ntuple(d->x, D))
 # Vec{D,T}(x::T) where {D,T} = Vec{D,T}(ntuple(d->x, D))
 
-vec1(::Val{D}, x::T) where {D, T} = Vec{D,T}(ntuple(d -> x, D))
+# vec1(::Val{D}, x::T) where {D, T} = Vec{D,T}(ntuple(d -> x, D))
 
-function Base.size(x::Vec{D,T}, d)::Int where {D, T}
+
+
+# Vec interacts with scalars
+
+function Base.promote_rule(::Type{Vec{D,T}}, ::Type{T}) where {D, T<:Number}
+    Vec{D,T}
+end
+function Base.convert(::Type{Vec{D,T}}, x::T) where {D, T<:Number}
+    Vec{D,T}(ntuple(d -> x, D))
+end
+
+
+
+# Vec is a collection
+
+function Base.eltype(x::Vec{D,T})::Type where {D, T}
+    T
+end
+function Base.length(x::Vec{D,T})::Int where {D, T}
     D
+end
+function Base.ndims(x::Vec{D,T})::Int where {D, T}
+    1
 end
 function Base.size(x::Vec{D,T})::Tuple{Int} where {D, T}
     (D,)
 end
-function Base.length(x::Vec{D,T})::Int where {D, T}
+function Base.size(x::Vec{D,T}, d)::Int where {D, T}
     D
 end
 
@@ -49,8 +71,15 @@ function Base.getindex(x::Vec{D,T}, d::Integer)::T where {D, T}
     getindex(x.elts, d)
 end
 
+
+
+# Vec are a vector space
+
 function Base.zero(::Type{Vec{D,T}})::Vec{D,T} where {D, T<:Number}
     Vec{D,T}(ntuple(d -> T(0), D))
+end
+function Base.one(::Type{Vec{D,T}})::Vec{D,T} where {D, T<:Number}
+    Vec{D,T}(ntuple(d -> T(1), D))
 end
 
 function Base.:+(x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
@@ -58,6 +87,9 @@ function Base.:+(x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
 end
 function Base.:-(x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
     Vec{D,T}(.-(x.elts))
+end
+function Base.inv(x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
+    Vec{D,T}(inv.(x.elts))
 end
 
 function Base.:+(x::Vec{D,T}, y::Vec{D,T})::Vec{D,T} where {D, T<:Number}
@@ -67,66 +99,52 @@ function Base.:-(x::Vec{D,T}, y::Vec{D,T})::Vec{D,T} where {D, T<:Number}
     Vec{D,T}(x.elts .- y.elts)
 end
 
-function Base.:+(x::Vec{D,T}, y::T)::Vec{D,T} where {D, T<:Number}
-    x + Vec(ntuple(d -> y, D))
+function Base.:*(a::Number, x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
+    Vec{D,T}(T(a) .* x.elts)
 end
-function Base.:-(x::Vec{D,T}, y::T)::Vec{D,T} where {D, T<:Number}
-    x - Vec(ntuple(d -> y, D))
+function Base.:*(x::Vec{D,T}, a::Number)::Vec{D,T} where {D, T<:Number}
+    Vec{D,T}(x.elts .* T(a))
+end
+function Base.:\(a::Number, x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
+    Vec{D,T}(T(a) .\ x.elts)
+end
+function Base.:/(x::Vec{D,T}, a::Number)::Vec{D,T} where {D, T<:Number}
+    Vec{D,T}(x.elts ./ T(a))
 end
 
-function Base.:*(a::T, x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
-    Vec{D,T}(a .* x.elts)
+const ArithOp = Union{typeof(+), typeof(-), typeof(*), typeof(/), typeof(\)}
+function Base.broadcasted(op::ArithOp,
+                          x::Vec{D,T}, y::Vec{D,T})::Vec{D,T} where
+        {D, T<:Number}
+    Vec{D,T}(ntuple(d -> op(x.elts[d], y.elts[d]), D))
 end
-function Base.:*(x::Vec{D,T}, a::T)::Vec{D,T} where {D, T<:Number}
-    Vec{D,T}(x.elts .* a)
+function Base.broadcasted(op::ArithOp, x::Vec{D,T}, a::Number)::Vec{D,T} where
+        {D, T<:Number}
+    Vec{D,T}(ntuple(d -> op(x.elts[d], T(a)), D))
 end
-function Base.:\(x::Vec{D,T}, a::T)::Vec{D,T} where {D, T<:Number}
-    Vec{D,T}(a .\ x.elts)
-end
-function Base.:/(x::Vec{D,T}, a::T)::Vec{D,T} where {D, T<:Number}
-    Vec{D,T}(x.elts ./ a)
+function Base.broadcasted(op::ArithOp, a::Number, x::Vec{D,T})::Vec{D,T} where
+        {D, T<:Number}
+    Vec{D,T}(ntuple(d -> op(T(a), x.elts[d]), D))
 end
 
 function LinearAlgebra.norm(x::Vec{D,T}, p::Real=2) where {D, T<:Number}
     norm(x.elts, p)
 end
 
-function Base.:(==)(x::Vec{D,T}, y::Vec{D,T})::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] == y.elts[d], D))
+const CmpOp = Union{typeof(==), typeof(!=),
+                    typeof(<), typeof(<=), typeof(>), typeof(>=)}
+function Base.broadcasted(op::CmpOp,
+                          x::Vec{D,T}, y::Vec{D,T})::Vec{D,Bool} where
+        {D, T<:Number}
+    Vec{D,Bool}(ntuple(d -> op(x.elts[d], y.elts[d]), D))
 end
-function Base.:!=(x::Vec{D,T}, y::Vec{D,T})::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] != y.elts[d], D))
+function Base.broadcasted(op::CmpOp, x::Vec{D,T}, a::Number)::Vec{D,Bool} where
+        {D, T<:Number}
+    Vec{D,Bool}(ntuple(d -> op(x.elts[d], T(a)), D))
 end
-function Base.:<(x::Vec{D,T}, y::Vec{D,T})::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] < y.elts[d], D))
-end
-function Base.:<=(x::Vec{D,T}, y::Vec{D,T})::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] <= y.elts[d], D))
-end
-function Base.:>(x::Vec{D,T}, y::Vec{D,T})::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] > y.elts[d], D))
-end
-function Base.:>=(x::Vec{D,T}, y::Vec{D,T})::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] >= y.elts[d], D))
-end
-
-function Base.:(==)(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] == y, D))
-end
-function Base.:!=(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] != y, D))
-end
-function Base.:<(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] < y, D))
-end
-function Base.:<=(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] <= y, D))
-end
-function Base.:>(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] > y, D))
-end
-function Base.:>=(x::Vec{D,T}, y::T)::Vec{D,Bool} where {D, T<:Number}
-    Vec{D,Bool}(ntuple(d -> x.elts[d] >= y, D))
+function Base.broadcasted(op::CmpOp, a::Number, x::Vec{D,T})::Vec{D,Bool} where
+        {D, T<:Number}
+    Vec{D,Bool}(ntuple(d -> op(T(a), x.elts[d]), D))
 end
 
 function Base.:~(x::Vec{D,Bool})::Vec{D,Bool} where {D}
@@ -241,6 +259,24 @@ function dot_basis(par::Par{D,T}, d::Int, i::Int, j::Int)::T where
     end
 end
 
+# Integration weighs for basis functions (assuming a diagonal weight matrix)
+export weight
+function weight(par::Par{D,T}, i::Int)::T where {D, T<:Number}
+    n = par.n[d]
+    @assert i>=0 && i<n
+    dx = (par.xmax[d] - par.xmin[d]) / (n - 1)
+    if i == 0
+        return dx/2
+    elseif i < n-1
+        return dx
+    else
+        return dx/2
+    end
+end
+function weight(par::Par{D,T}, i::Vec{D,Int})::T where {D, T<:Number}
+    prod(weight(par, i[d]) for d in 1:D)
+end
+
 
 
 ################################################################################
@@ -248,16 +284,138 @@ end
 # Discretized functions
 
 export Fun
-struct Fun{D,T,U}
+struct Fun{D,T,U} <: DenseArray{T, D}
     par::Par{D,T}
     coeffs::Array{U,D}
 end
 
+
+
+# Fun interacts with scalars
+
+# function Base.promote_rule(::Type{Fun{D,T,U}}, ::Type{U}) where
+#         {D, T<:Number, U<:Number}
+#     Fun{D,T,U}
+# end
+# function Base.convert(::Type{Fun{D,T,U}}, x::U) where {D, T<:Number, U<:Number}
+#     Fun{D,T,U}(ntuple(d -> x, D))
+# end
+
+
+
+# Fun is a collection
+
+function Base.eltype(f::Fun{D,T,U})::Type where {D, T, U}
+    U
+end
+function Base.length(f::Fun{D,T,U})::Int where {D, T, U}
+    prod(f.par.n)
+end
+function Base.ndims(f::Fun{D,T,U})::Int where {D, T, U}
+    D
+end
+function Base.size(f::Fun{D,T,U})::NTuple{D,Int} where {D, T, U}
+    f.par.n.elts
+end
+function Base.size(f::Fun{D,T,U}, d)::Int where {D, T, U}
+    prod(f.par.n)
+end
+
+function Base.getindex(f::Fun{D,T,U}, i::Vec{D,Int})::U where {D, T, U}
+    getindex(f.coeffs, i.elts)
+end
+function Base.getindex(f::Fun{D,T,U}, is...)::U where {D, T, U}
+    getindex(f.coeffs, is...)
+end
+
+
+
+# Fun is a vector space
+
+function Base.zero(::Type{Fun{D,T,U}}, par::Par{D,T})::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    Fun{D,T,U}(par, zeros(U, par.n.elts))
+end
+
+function Base.:+(f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U<:Number}
+    Fun{D,T,U}(f.par, +f.elts)
+end
+function Base.:-(f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U<:Number}
+    Fun{D,T,U}(f.par, -f.elts)
+end
+
+function Base.:+(f::Fun{D,T,U}, g::Fun{D,T,U})::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    @assert f.par == g.par
+    Fun{D,T,U}(f.par, f.coeffs + g.coeffs)
+end
+function Base.:-(f::Fun{D,T,U}, g::Fun{D,T,U})::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    @assert f.par == g.par
+    Fun{D,T,U}(f.par, f.coeffs - g.coeffs)
+end
+
+function Base.:*(a::Number, f::Fun{D,T,U})::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    Fun{D,T,U}(f.par, U(a) * f.coeffs)
+end
+function Base.:*(f::Fun{D,T,U}, a::Number)::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    Fun{D,T,U}(f.par, f.coeffs * U(a))
+end
+function Base.:\(a::Number, f::Fun{D,T,U})::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    Fun{D,T,U}(f.par, U(a) \ f.coeffs)
+end
+function Base.:/(f::Fun{D,T,U}, a::Number)::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    Fun{D,T,U}(f.par, f.coeffs / U(a))
+end
+
+# function Base.:.+(f::Fun{D,T,U}, c::U)::Fun{D,T,U} where
+#         {D, T<:Number, U<:Number}
+#     Fun{D,T,U}(f.par, f.coeffs .+ c)
+# end
+# function Base.:.-(f::Fun{D,T,U}, c::U)::Fun{D,T,U} where
+#         {D, T<:Number, U<:Number}
+#     Fun{D,T,U}(f.par, f.coeffs .- c)
+# end
+
+# function Base.:*(f::Fun{D,T,U}, g::Fun{D,T,U})::U where
+#         {D, T<:Number, U<:Number}
+# TODO: bra and ket
+# end
+
+# function LinearAlgebra.norm(f::Fun{D,T,U}, p::Real=2) where
+#         {D, T<:Number, U<:Number}
+#     TODO
+# end
+
+
+
+# Fun are a category
+
+# TODO: composition
+
+function fconst(par::Par{D,T}, f::U)::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    cs = fill(f, par.n.elts)
+    Fun{D,T,U}(par, cs)
+end
+
+function fidentity(::Type{U}, par::Par{1,T})::Fun{1,T,U} where
+        {T<:Number, U<:Number}
+    cs = LinRange(U(par.xmin[1]), U(par.xmax[1]), par.n[1])
+    Fun{1,T,U}(par, cs)
+end
+
+
+
 # Evaluate a function
-function (fun::Fun{D,T,U})(x::Vec{D,T})::U where {D,T,U}
+function (fun::Fun{D,T,U})(x::Vec{D,T})::U where {D, T<:Number, U<:Number}
     f = U(0)
     for ic in CartesianIndices(size(fun.coeffs))
-        i = Vec(ic.I) - 1
+        i = Vec(ic.I) .- 1
         f += fun.coeffs[ic] * basis(fun.par, i, x)
     end
     f
@@ -265,26 +423,29 @@ end
 
 # Create a discretized function by projecting onto the basis functions
 export approximate
-function approximate(fun, ::Type{U}, par::Par{D,T})::Fun{D,U} where
+function approximate(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
     fs = Array{U,D}(undef, par.n.elts)
     for ic in CartesianIndices(size(fs))
-        i = Vec(ic.I) - 1
+        i = Vec(ic.I) .- 1
         f = U(0)
         # Integrate piecewise
         for jc in CartesianIndices(ntuple(d -> 0:1, D))
-            ij = i + Vec(jc.I) - 1
-            if all(ij >= 0) && all(ij < par.n - 1)
+            ij = i + Vec(jc.I) .- 1
+            if all(ij .>= 0) && all(ij .< par.n .- 1)
                 x0 = Vec{D,T}(ntuple(d -> linear(
                     0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]), D))
                 x1 = Vec{D,T}(ntuple(d -> linear(
                     0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]+1), D))
-                function kernel(x0::SVector{D,T})::U
-                    x = Vec(Tuple(x0))
+                S = eltype(U)
+                function kernel(x0)::U
+                    x = Vec{D,T}(Tuple(x0))
                     U(fun(x)) * U(basis(par, i, x))
                 end
                 r, e = hcubature(kernel,
-                                 SVector{D,T}(x0.elts), SVector{D,T}(x1.elts))
+                                 SVector{D,S}(SVector{D,T}(x0.elts)),
+                                 SVector{D,S}(SVector{D,T}(x1.elts)),
+                                 rtol=sqrt(S(max(eps(T), eps(S)))))
                 f += r
             end
         end
@@ -336,11 +497,12 @@ end
 
 # Approximate a delta function
 export approximate_delta
-function approximate_delta(::Type{U}, par::Par{D,T}, x::T)::Vector{U} where
+function approximate_delta(::Type{U}, par::Par{D,T},
+                           x::Vec{D,T})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
     fs = Array{U,D}(undef, par.n.elts)
     for ic in CartesianIndices(size(fs))
-        i = Vec(ic.I) - 1
+        i = Vec(ic.I) .- 1
         fs[ic] = U(basis(par, i, x))
     end
 
@@ -384,7 +546,7 @@ function approximate_delta(::Type{U}, par::Par{D,T}, x::T)::Vector{U} where
     else
         @assert false
     end
-    return Fun{D,T,U}(par, cs)
+    Fun{D,T,U}(par, cs)
 end
 
 
@@ -500,6 +662,316 @@ function deriv2(fun::Fun{D,T,U}, dir1::Int, dir2::Int)::Fun{D,T,U} where
     else
         deriv(deriv(fun, dir1), dir2)
     end
+end
+
+
+
+################################################################################
+
+# Operators
+
+export Op
+struct Op{D,T,U} <: AbstractArray{U, 2}
+    par::Par{D,T}
+    mat::SparseMatrixCSC{U,Int}
+end
+
+
+
+# Op interacts with scalars
+
+# function Base.promote_rule(::Type{Op{D,T,U}}, ::Type{U}) where
+#         {D, T<:Number, U<:Number}
+#     Op{D,T,U}
+# end
+# function Base.convert(::Type{Op{D,T,U}}, x::U) where {D, T<:Number, U<:Number}
+#     Op{D,T,U}(ntuple(d -> x, D))
+# end
+
+# Fun is a collection
+
+function Base.eltype(A::Op{D,T,U})::Type where {D, T, U}
+    eltype(A.mat)
+end
+function Base.length(A::Op{D,T,U})::Int where {D, T, U}
+    length(A.mat)
+end
+function Base.ndims(A::Op{D,T,U})::Int where {D, T, U}
+    ndims(A.mat)
+end
+function Base.size(A::Op{D,T,U})::NTuple{D,Int} where {D, T, U}
+    size(A.mat)
+end
+function Base.size(A::Op{D,T,U}, d)::Int where {D, T, U}
+    size(A.mat, d)
+end
+
+function Base.getindex(A::Op{D,T,U}, i::Vec{D,Int})::U where {D, T, U}
+    getindex(A.mat, i.elts)
+end
+function Base.getindex(A::Op{D,T,U}, is...)::U where {D, T, U}
+    getindex(A.mat, is...)
+end
+
+
+
+# Op is a vector space
+
+function Base.zero(::Type{Op{D,T,U}}, par::Par{D,T})::Op{D,T,U} where
+        {D, T, U<:Number}
+    len = prod(par.n)
+    mat = spzeros(U, len, len)
+    Op{D,T,U}(par, mat)
+end
+function Base.one(::Type{Op{D,T,U}}, par::Par{D,T})::Op{D,T,U} where
+        {D, T, U<:Number}
+    n = par.n
+
+    str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
+    len = prod(n)
+    idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
+
+    I = Int[]
+    J = Int[]
+    V = U[]
+    function ins!(i, j, v)
+        push!(I, idx(i))
+        push!(J, idx(j))
+        push!(V, v)
+    end
+    for ic in CartesianIndices(par.n.elts)
+        i = Vec(ic.I) .- 1
+        ins!(i, i, U(1))
+    end
+    mat = sparse(I, J, V, len, len)
+    Op{D,T,U}(par, mat)
+end
+
+function Base.:+(A::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U<:Number}
+    Op{D,T,U}(A.par, +A.mat)
+end
+function Base.:-(A::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U<:Number}
+    Op{D,T,U}(A.par, -A.mat)
+end
+
+function Base.:+(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    @assert A.par == B.par
+    Op{D,T,U}(A.par, A.mat + B.mat)
+end
+function Base.:-(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    @assert A.par == B.par
+    Op{D,T,U}(A.par, A.mat - B.mat)
+end
+
+function Base.:*(a::Number, A::Op{D,T,U})::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    Op{D,T,U}(A.par, U(a) * A.mat)
+end
+function Base.:*(A::Op{D,T,U}, a::Number)::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    Op{D,T,U}(A.par, A.mat * U(a))
+end
+function Base.:\(a::Number, A::Op{D,T,U})::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    Op{D,T,U}(A.par, U(a) \ A.mat)
+end
+function Base.:/(A::Op{D,T,U}, a::Number)::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    Op{D,T,U}(A.par, A.mat / U(a))
+end
+
+
+
+function Base.:*(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    @assert A.par == B.par
+    Op{D,T,U}(A.par, A.mat * B.mat)
+end
+
+
+
+function Base.:*(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where
+        {D, T, U<:Number}
+    par = rhs.par
+    @assert op.par == par
+
+    res = reshape(op.mat * reshape(rhs.coeffs, :), par.n.elts)
+    Fun{D,T,U}(par, res)
+end
+
+# function Base.:*(lhs::Fun{D,T,U}, op::Op{D,T,U})::Fun{D,T,U} where
+#         {D, T, U<:Number}
+#     par = rhs.par
+#     @assert op.par == par
+# 
+#     TODO: bra and ket
+#     res = reshape(reshape(lhs.coeffs, :) * op.mat, par.n.elts)
+#     Fun{D,T,U}(par, res)
+# end
+
+function Base.:\(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where
+        {D, T, U<:Number}
+    par = rhs.par
+    @assert op.par == par
+
+    if T <: Union{Float32, Float64}
+        sol = reshape(op.mat \ reshape(rhs.coeffs, :), par.n.elts)
+    else
+        @info "Converting sparse to full matrix..."
+        sol = reshape(Matrix(op.mat) \ reshape(rhs.coeffs, :), par.n.elts)
+    end
+    Fun{D,T,U}(par, sol)
+end
+
+# function Base.:\(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where
+#         {D, T, U<:Number}
+#     par = rhs.par
+#     @assert op.par == par
+# 
+#     len = prod(par.n)
+# 
+#     bnd = boundary(U, par)
+#     proj = I(len) - bnd.mat
+#     sol = reshape(op.mat \ (proj * reshape(rhs.coeffs, :)), par.n.elts)
+#     Fun{D,T,U}(par, sol)
+# end
+
+
+
+export boundary
+function boundary(::Type{U}, par::Par{D,T})::Op{D,T,U} where {D, T, U<:Number}
+    n = par.n
+
+    str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
+    len = prod(n)
+    idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
+
+    I = Int[]
+    J = Int[]
+    V = U[]
+    function ins!(i, j, v)
+        push!(I, idx(i))
+        push!(J, idx(j))
+        push!(V, v)
+    end
+    for ic in CartesianIndices(par.n.elts)
+        i = Vec(ic.I) .- 1
+        if any(i .== 0) || any(i .== n .- 1)
+            ins!(i, i, U(1))
+        end
+    end
+    mat = sparse(I, J, V, len, len)
+    Op{D,T,U}(par, mat)
+end
+
+export dirichlet
+# TODO: Is this correct?
+const dirichlet = boundary
+
+export laplace
+function laplace(::Type{U}, par::Par{D,T})::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    n = par.n
+    dx2 = Vec(ntuple(d -> ((par.xmax[d] - par.xmin[d]) / (n[d] - 1)) ^ 2, D))
+
+    str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
+    len = prod(n)
+    idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
+
+    I = Int[]
+    J = Int[]
+    V = U[]
+    function ins!(i, j, v)
+        push!(I, idx(i))
+        push!(J, idx(j))
+        push!(V, v)
+    end
+    for ic in CartesianIndices(par.n.elts)
+        i = Vec(ic.I) .- 1
+        for dir in 1:D
+            di = Vec(ntuple(d -> d==dir ? 1 : 0, D))
+            if i[dir] == 0
+                j = i + di
+            elseif i[dir] == n[dir]-1
+                j = i - di
+            else
+                j = i
+            end
+            ins!(i, j - di, 1 / U(dx2[dir]))
+            ins!(i, j, -2 / U(dx2[dir]))
+            ins!(i, j + di, 1 / U(dx2[dir]))
+        end
+    end
+    mat = sparse(I, J, V, len, len)
+    Op{D,T,U}(par, mat)
+end
+
+export mix_op_bc
+function mix_op_bc(iop::Op{D,T,U}, bop::Op{D,T,U})::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    par = iop.par
+    @assert bop.par == par
+
+    id = one(Op{D,T,U}, par)
+    bnd = boundary(U, par)
+    int = id - bnd
+    int * iop + bnd * bop
+end
+function mix_op_bc(rhs::Fun{D,T,U}, bvals::Fun{D,T,U})::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    par = rhs.par
+    @assert bvals.par == par
+
+    id = one(Op{D,T,U}, par)
+    bnd = boundary(U, par)
+    int = id - bnd
+    int * rhs + bnd * bvals
+end
+
+export poisson
+function poisson(::Type{U}, par::Par{D,T})::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    n = par.n
+    S = eltype(U)
+    dx2 = Vec(ntuple(d -> (S(par.xmax[d] - par.xmin[d]) / (n[d] - 1)) ^ 2, D))
+
+    str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
+    len = prod(n)
+    idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
+
+    I = Int[]
+    J = Int[]
+    V = U[]
+    function ins!(i, j, v)
+        push!(I, idx(i))
+        push!(J, idx(j))
+        push!(V, v)
+    end
+    # mat = zeros(U, len, len)
+    # ins!(i, j, v) = mat[idx(i), idx(j)] = v
+    for ic in CartesianIndices(par.n.elts)
+        i = Vec(ic.I) .- 1
+        if any(i .== 0) || any(i .== n .- 1)
+            # Boundary
+            j = i
+            ins!(i, j, U(1))
+        else
+            # Interior
+            for dir in 1:D
+                di = Vec(ntuple(d -> d==dir ? 1 : 0, D))
+                jm = i - di
+                ins!(i, jm, 1/U(dx2[dir]))
+                j = i
+                ins!(i, j, -2/U(dx2[dir]))
+                jp = i + di
+                ins!(i, jp, 1/U(dx2[dir]))
+            end
+        end
+    end
+    mat = sparse(I, J, V, len, len)
+    Op{D,T,U}(par, mat)
 end
 
 end

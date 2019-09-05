@@ -6,7 +6,7 @@ using Test
 const par = Par{3,Float64}(9)
 
 @testset "Parameters" begin
-    @test all(par.n == 9)
+    @test all(par.n .== 9)
 end
 
 
@@ -18,7 +18,6 @@ end
 const fsinpi = approximate(sinpiD, Float64, par)
 
 @testset "Approximation" begin
-    
     function find_maxerr()
         maxerr = 0.0
         for z in LinRange(-1.0, 1.0, 11),
@@ -33,13 +32,11 @@ const fsinpi = approximate(sinpiD, Float64, par)
     end
     maxerr = find_maxerr()
     @test 0.05 <= maxerr < 0.06
-    
 end
 
 
 
 @testset "Derivatives" begin
-    
     function sinpiDx(x::Vec{D,T})::T where {D,T}
         pi * cospi(x[1]) * prod(sinpi(x[d]) for d in 2:D)
     end
@@ -49,13 +46,11 @@ end
     
     maxdiffx = maximum(abs.(fsinpix1.coeffs .- fsinpix2.coeffs))
     @test 0.42 <= maxdiffx < 0.43
-
 end
 
 
 
 @testset "Second derivatives" begin
-        
     function sinpiDxx(x::Vec{D,T})::T where {D,T}
         - pi^2 * sinpi(x[1]) * prod(sinpi(x[d]) for d in 2:D)
     end
@@ -75,5 +70,21 @@ end
     
     maxdiffxy = maximum(abs.(fsinpixy1.coeffs .- fsinpixy2.coeffs))
     @test 2.4 <= maxdiffxy < 2.5
+end
 
+
+
+@testset "Poisson equation" begin
+    lap = laplace(Float64, par)
+    del = 2pi * approximate_delta(Float64, par, Vec((0.0, 0.0, 0.0)))
+    dir = dirichlet(Float64, par)
+    bvals = zero(typeof(del), par)
+
+    op = mix_op_bc(lap, dir)
+    rhs = mix_op_bc(del, bvals)
+    pot = op \ del
+
+    res = op * pot - del
+    maxres = maximum(abs.(res.coeffs))
+    @test maxres < 1.0e-12
 end
