@@ -13,6 +13,12 @@ using TensorOperations
 
 # Miscallaneous utilities
 
+# Inverse of signbit
+export bitsign
+function bitsign(b::Bool)::Int
+    b ? -1 : +1
+end
+
 # Linear interpolation
 export linear
 function linear(x0::T, y0::U, x1::T, y1::U, x::T)::U where
@@ -423,35 +429,63 @@ end
 
 # Create a discretized function by projecting onto the basis functions
 export approximate
-function approximate(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
+function approximate(fun, ::Type{U}, par::Par{D,T};
+                     # mask::Union{Nothing, Op{D,T,U}}=nothing,
+                     mask=nothing,
+                     rtol::Real=0)::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
+    S = eltype(U)
+    if rtol == 0
+        rtol = sqrt(S(max(eps(T), eps(S))))
+    else
+        rtol = S(rtol)
+    end
+
+    str = Vec{D,Int}(ntuple(dir ->
+                            dir==1 ? 1 : prod(par.n[d] for d in 1:dir-1), D))
+    len = prod(par.n)
+    idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
+    function active(i::Vec{D,Int})::Bool
+        mask === nothing && return true
+        mask.mat[idx(i), idx(i)] != 0
+    end
+
     fs = Array{U,D}(undef, par.n.elts)
+    t0 = Libc.time()
     for ic in CartesianIndices(size(fs))
         i = Vec(ic.I) .- 1
+        t1 = Libc.time()
+        if t1 >= t0 + 10
+            pct = round(idx(i) / len * 100, digits=1)
+            @info "approximate $i ($pct%)"
+            t0 = t1
+        end
         f = U(0)
-        # Integrate piecewise
-        for jc in CartesianIndices(ntuple(d -> 0:1, D))
-            ij = i + Vec(jc.I) .- 1
-            if all(ij .>= 0) && all(ij .< par.n .- 1)
-                x0 = Vec{D,T}(ntuple(d -> linear(
-                    0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]), D))
-                x1 = Vec{D,T}(ntuple(d -> linear(
-                    0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]+1), D))
-                S = eltype(U)
-                function kernel(x0)::U
-                    x = Vec{D,T}(Tuple(x0))
-                    U(fun(x)) * U(basis(par, i, x))
+        if active(i)
+            # Integrate piecewise
+            for jc in CartesianIndices(ntuple(d -> 0:1, D))
+                ij = i + Vec(jc.I) .- 1
+                if all(ij .>= 0) && all(ij .< par.n .- 1)
+                    x0 = Vec{D,T}(ntuple(d -> linear(
+                        0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]), D))
+                    x1 = Vec{D,T}(ntuple(d -> linear(
+                        0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]+1), D))
+                    function kernel(x0)::U
+                        x = Vec{D,T}(Tuple(x0))
+                        U(fun(x)) * U(basis(par, i, x))
+                    end
+                    r, e = hcubature(kernel,
+                                     SVector{D,S}(SVector{D,T}(x0.elts)),
+                                     SVector{D,S}(SVector{D,T}(x1.elts)),
+                                     rtol=rtol)
+                    f += r
                 end
-                r, e = hcubature(kernel,
-                                 SVector{D,S}(SVector{D,T}(x0.elts)),
-                                 SVector{D,S}(SVector{D,T}(x1.elts)),
-                                 rtol=sqrt(S(max(eps(T), eps(S)))))
-                f += r
             end
         end
         fs[ic] = f
     end
 
+    @show "ap.1"
     Winvs = ntuple(D) do d
         # We know the overlaps of the support of the basis functions
         dv = [dot_basis(par, d, i, i) for i in 0:par.n[d]-1]
@@ -459,6 +493,7 @@ function approximate(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
         W = SymTridiagonal(dv, ev)
         inv(W)
     end
+    @show "ap.2"
 
     if D == 1
         Winv1 = Winvs[1]
@@ -484,11 +519,13 @@ function approximate(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
         Winv2 = Winvs[2]
         Winv3 = Winvs[3]
         Winv4 = Winvs[4]
+        @show "ap.3"
         @tensor begin
             cs[i1,i2,i3,i4] :=
                 (Winv1[i1,j1] * Winv2[i2,j2] * Winv3[i3,j3] * Winv4[i4,j4] *
                 fs[j1,j2,j3,j4])
         end
+        @show "ap.4"
     else
         @assert false
     end
@@ -699,7 +736,7 @@ end
 function Base.ndims(A::Op{D,T,U})::Int where {D, T, U}
     ndims(A.mat)
 end
-function Base.size(A::Op{D,T,U})::NTuple{D,Int} where {D, T, U}
+function Base.size(A::Op{D,T,U})::NTuple{2,Int} where {D, T, U}
     size(A.mat)
 end
 function Base.size(A::Op{D,T,U}, d)::Int where {D, T, U}
@@ -816,12 +853,14 @@ function Base.:\(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where
     par = rhs.par
     @assert op.par == par
 
+    M = op.mat
     if T <: Union{Float32, Float64}
-        sol = reshape(op.mat \ reshape(rhs.coeffs, :), par.n.elts)
+        # do nothing
     else
         @info "Converting sparse to full matrix..."
-        sol = reshape(Matrix(op.mat) \ reshape(rhs.coeffs, :), par.n.elts)
+        M = Matrix(M)
     end
+    sol = reshape(M \ reshape(rhs.coeffs, :), par.n.elts)
     Fun{D,T,U}(par, sol)
 end
 
@@ -884,6 +923,8 @@ function laplace(::Type{U}, par::Par{D,T})::Op{D,T,U} where
     J = Int[]
     V = U[]
     function ins!(i, j, v)
+        @assert all(0 .<= i .< n)
+        @assert all(0 .<= j .< n)
         push!(I, idx(i))
         push!(J, idx(j))
         push!(V, v)
@@ -894,7 +935,7 @@ function laplace(::Type{U}, par::Par{D,T})::Op{D,T,U} where
             di = Vec(ntuple(d -> d==dir ? 1 : 0, D))
             if i[dir] == 0
                 j = i + di
-            elseif i[dir] == n[dir]-1
+            elseif i[dir] == n[dir] - 1
                 j = i - di
             else
                 j = i
@@ -908,34 +949,12 @@ function laplace(::Type{U}, par::Par{D,T})::Op{D,T,U} where
     Op{D,T,U}(par, mat)
 end
 
-export mix_op_bc
-function mix_op_bc(iop::Op{D,T,U}, bop::Op{D,T,U})::Op{D,T,U} where
-        {D, T<:Number, U<:Number}
-    par = iop.par
-    @assert bop.par == par
 
-    id = one(Op{D,T,U}, par)
-    bnd = boundary(U, par)
-    int = id - bnd
-    int * iop + bnd * bop
-end
-function mix_op_bc(rhs::Fun{D,T,U}, bvals::Fun{D,T,U})::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
-    par = rhs.par
-    @assert bvals.par == par
 
-    id = one(Op{D,T,U}, par)
-    bnd = boundary(U, par)
-    int = id - bnd
-    int * rhs + bnd * bvals
-end
-
-export poisson
-function poisson(::Type{U}, par::Par{D,T})::Op{D,T,U} where
+export boundaryIV
+function boundaryIV(::Type{U}, par::Par{D,T})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
     n = par.n
-    S = eltype(U)
-    dx2 = Vec(ntuple(d -> (S(par.xmax[d] - par.xmin[d]) / (n[d] - 1)) ^ 2, D))
 
     str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
     len = prod(n)
@@ -949,29 +968,103 @@ function poisson(::Type{U}, par::Par{D,T})::Op{D,T,U} where
         push!(J, idx(j))
         push!(V, v)
     end
-    # mat = zeros(U, len, len)
-    # ins!(i, j, v) = mat[idx(i), idx(j)] = v
     for ic in CartesianIndices(par.n.elts)
         i = Vec(ic.I) .- 1
-        if any(i .== 0) || any(i .== n .- 1)
-            # Boundary
-            j = i
-            ins!(i, j, U(1))
-        else
-            # Interior
-            for dir in 1:D
-                di = Vec(ntuple(d -> d==dir ? 1 : 0, D))
-                jm = i - di
-                ins!(i, jm, 1/U(dx2[dir]))
-                j = i
-                ins!(i, j, -2/U(dx2[dir]))
-                jp = i + di
-                ins!(i, jp, 1/U(dx2[dir]))
+        isbnd = false
+        for d in 1:D
+            if d < D
+                isbnd |= i[d] == 0 || i[d] == n[d] - 1
+            else
+                isbnd |= i[d] <= 1
             end
+        end
+        if isbnd
+            ins!(i, i, U(1))
         end
     end
     mat = sparse(I, J, V, len, len)
     Op{D,T,U}(par, mat)
+end
+
+export dirichletIV
+# TODO: Is this correct?
+const dirichletIV = boundaryIV
+
+export dAlembert
+function dAlembert(::Type{U}, par::Par{D,T})::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    n = par.n
+    dx2 = Vec(ntuple(d -> ((par.xmax[d] - par.xmin[d]) / (n[d] - 1)) ^ 2, D))
+
+    str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
+    len = prod(n)
+    idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
+
+    I = Int[]
+    J = Int[]
+    V = U[]
+    function ins!(i, j, v)
+        @assert all(0 .<= i .< n)
+        @assert all(0 .<= j .< n)
+        push!(I, idx(i))
+        push!(J, idx(j))
+        push!(V, v)
+    end
+    for ic in CartesianIndices(par.n.elts)
+        i = Vec(ic.I) .- 1
+        for dir in 1:D
+            s = bitsign(dir == D)
+            di = Vec(ntuple(d -> d==dir ? 1 : 0, D))
+            if dir < D
+                if i[dir] == 0
+                    j = i + di
+                elseif i[dir] == n[dir] - 1
+                    j = i - di
+                else
+                    j = i
+                end
+            else
+                if i[dir] == 0
+                    j = i + di
+                elseif i[dir] == 1
+                    j = i
+                else
+                    j = i - di
+                end
+            end
+            ins!(i, j - di, s / U(dx2[dir]))
+            ins!(i, j, -2s / U(dx2[dir]))
+            ins!(i, j + di, s / U(dx2[dir]))
+        end
+    end
+    mat = sparse(I, J, V, len, len)
+    Op{D,T,U}(par, mat)
+end
+
+
+
+export mix_op_bc
+function mix_op_bc(bnd::Op{D,T,U},
+                   iop::Op{D,T,U}, bop::Op{D,T,U})::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    par = bnd.par
+    @assert iop.par == par
+    @assert bop.par == par
+
+    id = one(Op{D,T,U}, par)
+    int = id - bnd
+    int * iop + bnd * bop
+end
+function mix_op_bc(bnd::Op{D,T,U},
+                   rhs::Fun{D,T,U}, bvals::Fun{D,T,U})::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    par = bnd.par
+    @assert rhs.par == par
+    @assert bvals.par == par
+
+    id = one(Op{D,T,U}, par)
+    int = id - bnd
+    int * rhs + bnd * bvals
 end
 
 end
