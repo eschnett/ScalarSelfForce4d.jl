@@ -2,7 +2,6 @@ module ScalarSelfForce4d
 
 using HCubature
 using LinearAlgebra
-using QuadGK
 using SparseArrays
 using StaticArrays
 using TensorOperations
