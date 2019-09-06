@@ -1,4 +1,4 @@
-module ScalarSelf4d
+module ScalarSelfForce4d
 
 using HCubature
 using LinearAlgebra
