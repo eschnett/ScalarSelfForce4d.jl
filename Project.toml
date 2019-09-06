@@ -1,4 +1,4 @@
-name = "ScalarSelf4d"
+name = "ScalarSelfForce4d"
 uuid = "e756a656-3eb7-4864-8d3a-d46f9b7dc51b"
 authors = ["Erik Schnetter <schnetter@gmail.com>"]
 version = "0.1.0"

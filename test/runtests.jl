@@ -1,4 +1,4 @@
-using ScalarSelf4d
+using ScalarSelfForce4d
 using Test
 
 
@@ -99,7 +99,7 @@ function waveD(x::Vec{D,T})::T where {D,T}
     prod(sinpi(x[d]) for d in 1:D-1) * sinpi(w * x[D])
 end
 
-@testset "d'Alembert equation" begin
+@testset "Scalar wave equation" begin
     bnd = boundaryIV(Float64, par4)
 
     dal = dAlembert(Float64, par4)

@@ -485,7 +485,6 @@ function approximate(fun, ::Type{U}, par::Par{D,T};
         fs[ic] = f
     end
 
-    @show "ap.1"
     Winvs = ntuple(D) do d
         # We know the overlaps of the support of the basis functions
         dv = [dot_basis(par, d, i, i) for i in 0:par.n[d]-1]
@@ -493,7 +492,6 @@ function approximate(fun, ::Type{U}, par::Par{D,T};
         W = SymTridiagonal(dv, ev)
         inv(W)
     end
-    @show "ap.2"
 
     if D == 1
         Winv1 = Winvs[1]
@@ -519,13 +517,11 @@ function approximate(fun, ::Type{U}, par::Par{D,T};
         Winv2 = Winvs[2]
         Winv3 = Winvs[3]
         Winv4 = Winvs[4]
-        @show "ap.3"
         @tensor begin
             cs[i1,i2,i3,i4] :=
                 (Winv1[i1,j1] * Winv2[i2,j2] * Winv3[i3,j3] * Winv4[i4,j4] *
                 fs[j1,j2,j3,j4])
         end
-        @show "ap.4"
     else
         @assert false
     end
