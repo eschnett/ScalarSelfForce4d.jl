@@ -116,7 +116,7 @@ waveD(x) = waveD(Vec(x))
     @test 0.046 <= maxerr < 0.047
 end
 
-@testset "Scalar wave equation with singularity" begin
+@testset "Scalar wave equation with singular source" begin
     @assert all(par4.n[d] == par3.n[d] for d in 1:3)
 
     lap3 = laplace(Float64, par3)

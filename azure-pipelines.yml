@@ -13,7 +13,7 @@ jobs:
   - script: |
       wget -nv https://julialang-s3.julialang.org/bin/linux/x64/1.2/julia-$(JULIA_VERSION)-linux-x86_64.tar.gz
       tar zxf julia-$(JULIA_VERSION)-linux-x86_64.tar.gz
-    displayName: 'Download and extract Julia 1.2
+    displayName: 'Download and extract Julia 1.2'
 
   - script: |
       ./julia-$(JULIA_VERSION)/bin/julia --project=@. -e 'using Pkg; Pkg.instantiate()'
