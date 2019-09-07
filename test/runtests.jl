@@ -1,4 +1,6 @@
 using ScalarSelfForce4d
+
+using LinearAlgebra
 using Test
 
 
@@ -44,7 +46,7 @@ end
     fsinpix1 = deriv(fsinpi, 1)
     fsinpix2 = approximate(sinpiDx, Float64, par3)
     
-    maxdiffx = maximum(abs.(fsinpix1.coeffs .- fsinpix2.coeffs))
+    maxdiffx = norm(fsinpix1 - fsinpix2, Inf)
     @test 0.42 <= maxdiffx < 0.43
 end
 
@@ -58,7 +60,7 @@ end
     fsinpixx1 = deriv2(fsinpi, 1, 1)
     fsinpixx2 = approximate(sinpiDxx, Float64, par3)
     
-    maxdiffxx = maximum(abs.(fsinpixx1.coeffs .- fsinpixx2.coeffs))
+    maxdiffxx = norm(fsinpixx1 - fsinpixx2, Inf)
     @test 7.3 <= maxdiffxx < 7.4
     
     function sinpiDxy(x::Vec{D,T})::T where {D,T}
@@ -68,7 +70,7 @@ end
     fsinpixy1 = deriv2(fsinpi, 1, 2)
     fsinpixy2 = approximate(sinpiDxy, Float64, par3)
     
-    maxdiffxy = maximum(abs.(fsinpixy1.coeffs .- fsinpixy2.coeffs))
+    maxdiffxy = norm(fsinpixy1 - fsinpixy2, Inf)
     @test 2.4 <= maxdiffxy < 2.5
 end
 
@@ -78,7 +80,7 @@ end
     lap = laplace(Float64, par3)
     del = 2pi * approximate_delta(Float64, par3, Vec((0.0, 0.0, 0.0)))
     dir = dirichlet(Float64, par3)
-    bvals = zero(typeof(del), par3)
+    bvals = zeros(typeof(del), par3)
 
     bnd = boundary(Float64, par3)
     op = mix_op_bc(bnd, lap, dir)
@@ -86,7 +88,7 @@ end
     pot = op \ rhs
 
     res = op * pot - rhs
-    maxres = maximum(abs.(res.coeffs))
+    maxres = norm(res, Inf)
     @test maxres < 1.0e-12
 end
 
@@ -94,24 +96,21 @@ end
 
 const par4 = Par{4,Float64}(9)
 
-function waveD(x::Vec{D,T})::T where {D,T}
-    w = sqrt(T(3))
-    prod(sinpi(x[d]) for d in 1:D-1) * sinpi(w * x[D])
+@generated function waveD(x::Vec{D,T})::T where {D,T}
+    fs = [:(sinpi(x[$d])) for d in 1:D-1]
+    quote
+        $(Expr(:meta, :inline))
+        w = sqrt(T(3))
+        *($(fs...), sinpi(w * x[D]))
+    end
 end
 
 @testset "Scalar wave equation" begin
-    bnd = boundaryIV(Float64, par4)
+    pot = zeros(Fun{4,Float64,Float64}, par4)
+    bvals = approximate(waveD, Float64, par4, rtol=1.0e-4)
+    sol = solve_dAlembert_Dirichlet(pot, bvals)
 
-    dal = dAlembert(Float64, par4)
-    pot = zero(Fun{4,Float64,Float64}, par4)
-    dir = dirichletIV(Float64, par4)
-    bvals = approximate(waveD, Float64, par4, mask=bnd, rtol=1.0e-4)
-
-    op = mix_op_bc(bnd, dal, dir)
-    rhs = mix_op_bc(bnd, pot, bvals)
-    sol = op \ rhs
-
-    res = op * sol - rhs
-    maxres = maximum(abs.(res.coeffs))
-    @test maxres < 1.0e-12
+    err = sol - bvals
+    @show maxerr = norm(err, Inf)
+    @test 0.03 <= maxerr < 0.04
 end

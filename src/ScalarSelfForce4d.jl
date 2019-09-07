@@ -4,7 +4,6 @@ using HCubature
 using LinearAlgebra
 using SparseArrays
 using StaticArrays
-using TensorOperations
 
 
 
@@ -23,6 +22,23 @@ export linear
 function linear(x0::T, y0::U, x1::T, y1::U, x::T)::U where
         {T<:Number, U<:Number}
     U(x - x1) / U(x0 - x1) * y0 + U(x - x0) / U(x1 - x0) * y1
+end
+
+# Numerical quadrature
+export quad
+@generated function quad(f, ::Type{U},
+                         xmin::NTuple{D,T}, xmax::NTuple{D,T},
+                         n::NTuple{D,Int})::U where {D, T, U}
+    quote
+        s = zero(U)
+        for i in CartesianIndices(n)
+            x = ntuple(d -> linear(T(0), xmin[d],
+                                   T(n[d]), xmax[d], i[d] - T(1)/2), D)
+            s += f(x)
+        end
+        w = U(*($([:((xmax[$d] - xmin[$d]) / n[$d]) for d in 1:D]...)))
+        w * s
+    end
 end
 
 
@@ -80,12 +96,15 @@ end
 
 # Vec are a vector space
 
-function Base.zero(::Type{Vec{D,T}})::Vec{D,T} where {D, T<:Number}
+function Base.zeros(::Type{Vec{D,T}})::Vec{D,T} where {D, T<:Number}
     Vec{D,T}(ntuple(d -> T(0), D))
 end
-function Base.one(::Type{Vec{D,T}})::Vec{D,T} where {D, T<:Number}
-    Vec{D,T}(ntuple(d -> T(1), D))
-end
+# function Base.zero(::Type{Vec{D,T}})::Vec{D,T} where {D, T<:Number}
+#     Vec{D,T}(ntuple(d -> T(0), D))
+# end
+# function Base.one(::Type{Vec{D,T}})::Vec{D,T} where {D, T<:Number}
+#     Vec{D,T}(ntuple(d -> T(1), D))
+# end
 
 function Base.:+(x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
     Vec{D,T}(.+(x.elts))
@@ -130,10 +149,6 @@ end
 function Base.broadcasted(op::ArithOp, a::Number, x::Vec{D,T})::Vec{D,T} where
         {D, T<:Number}
     Vec{D,T}(ntuple(d -> op(T(a), x.elts[d]), D))
-end
-
-function LinearAlgebra.norm(x::Vec{D,T}, p::Real=2) where {D, T<:Number}
-    norm(x.elts, p)
 end
 
 const CmpOp = Union{typeof(==), typeof(!=),
@@ -188,6 +203,10 @@ function Base.prod(x::Vec{D,T})::T where {D, T<:Number}
 end
 function Base.sum(x::Vec{D,T})::T where {D, T<:Number}
     sum(x.elts)
+end
+
+function LinearAlgebra.norm(x::Vec{D,T}, p::Real=2) where {D, T<:Number}
+    norm(x.elts, p)
 end
 
 
@@ -337,7 +356,7 @@ end
 
 # Fun is a vector space
 
-function Base.zero(::Type{Fun{D,T,U}}, par::Par{D,T})::Fun{D,T,U} where
+function Base.zeros(::Type{Fun{D,T,U}}, par::Par{D,T})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
     Fun{D,T,U}(par, zeros(U, par.n.elts))
 end
@@ -391,10 +410,52 @@ end
 # TODO: bra and ket
 # end
 
-# function LinearAlgebra.norm(f::Fun{D,T,U}, p::Real=2) where
-#         {D, T<:Number, U<:Number}
-#     TODO
-# end
+function Base.max(f::Fun{D,T,U})::T where {D, T<:Number, U<:Number}
+    maximum(f.coeffs)
+end
+function Base.min(f::Fun{D,T,U})::T where {D, T<:Number, U<:Number}
+    minimum(f.coeffs)
+end
+function Base.sum(f::Fun{D,T,U})::T where {D, T<:Number, U<:Number}
+    Ws = ntuple(D) do d
+        # We know the overlaps of the support of the basis functions
+        dv = [dot_basis(par, d, i, i) for i in 0:par.n[d]-1]
+        ev = [dot_basis(par, d, i, i+1) for i in 0:par.n[d]-2]
+        SymTridiagonal(dv, ev)
+    end
+
+    n = par.n
+    s = U(0)
+    if D == 1
+        for i1 in 1:n[1]
+            s += Ws[1][i1] * f.coeffs[i1]
+        end
+    elseif D == 2
+        for i2 in 1:n[2], i1 in 1:n[1]
+            s += Ws[1][i1] * Ws[2][i2] * f.coeffs[i1,i2]
+        end
+    elseif D == 3
+        for i3 in 1:n[3], i2 in 1:n[2], i1 in 1:n[1]
+            s += Ws[1][i1] * Ws[2][i2] * Ws[3][i3] * f.coeffs[i1,i2,i3]
+        end
+    elseif D == 4
+        for i4 in 1:n[4], i3 in 1:n[3], i2 in 1:n[2], i1 in 1:n[1]
+            s += (Ws[1][i1] * Ws[2][i2] * Ws[3][i3] * Ws[4][i4] *
+                  f.coeffs[i1,i2,i3,i4])
+        end
+    else
+        @assert false
+    end
+end
+
+function LinearAlgebra.norm(f::Fun{D,T,U}, p::Real=2) where
+        {D, T<:Number, U<:Number}
+    if p == Inf
+        maximum(abs.(f.coeffs))
+    else
+        @assert false
+    end
+end
 
 
 
@@ -456,7 +517,6 @@ function approximate(fun, ::Type{U}, par::Par{D,T};
         t1 = Libc.time()
         if t1 >= t0 + 10
             pct = round(idx(i) / len * 100, digits=1)
-            @info "approximate $i ($pct%)"
             t0 = t1
         end
         f = U(0)
@@ -484,42 +544,46 @@ function approximate(fun, ::Type{U}, par::Par{D,T};
         fs[ic] = f
     end
 
-    Winvs = ntuple(D) do d
+    Ws = ntuple(D) do d
         # We know the overlaps of the support of the basis functions
         dv = [dot_basis(par, d, i, i) for i in 0:par.n[d]-1]
         ev = [dot_basis(par, d, i, i+1) for i in 0:par.n[d]-2]
-        W = SymTridiagonal(dv, ev)
-        inv(W)
+        SymTridiagonal(dv, ev)
     end
 
+    n = par.n
+    cs = fs
     if D == 1
-        Winv1 = Winvs[1]
-        @tensor begin
-            cs[i1] := Winv1[i1,j1] * fs[j1]
-        end
+        cs[:] = Ws[1] \ cs[:]
     elseif D == 2
-        Winv1 = Winvs[1]
-        Winv2 = Winvs[2]
-        @tensor begin
-            cs[i1,i2] := Winv1[i1,j1] * Winv2[i2,j2] * fs[j1,j2]
+        for i2 in 1:n[2]
+            cs[:,i2] = Ws[1] \ cs[:,i2]
+        end
+        for i1 in 1:n[1]
+            cs[i1,:] = Ws[2] \ cs[i1,:]
         end
     elseif D == 3
-        Winv1 = Winvs[1]
-        Winv2 = Winvs[2]
-        Winv3 = Winvs[3]
-        @tensor begin
-            cs[i1,i2,i3] :=
-                Winv1[i1,j1] * Winv2[i2,j2] * Winv3[i3,j3] * fs[j1,j2,j3]
+        for i3 in 1:n[3], i2 in 1:n[2]
+            cs[:,i2,i3] = Ws[1] \ cs[:,i2,i3]
+        end
+        for i3 in 1:n[3], i1 in 1:n[1]
+            cs[i1,:,i3] = Ws[2] \ cs[i1,:,i3]
+        end
+        for i2 in 1:n[2], i1 in 1:n[1]
+            cs[i1,i2,:] = Ws[3] \ cs[i1,i2,:]
         end
     elseif D == 4
-        Winv1 = Winvs[1]
-        Winv2 = Winvs[2]
-        Winv3 = Winvs[3]
-        Winv4 = Winvs[4]
-        @tensor begin
-            cs[i1,i2,i3,i4] :=
-                (Winv1[i1,j1] * Winv2[i2,j2] * Winv3[i3,j3] * Winv4[i4,j4] *
-                fs[j1,j2,j3,j4])
+        for i4 in 1:n[4], i3 in 1:n[3], i2 in 1:n[2]
+            cs[:,i2,i3,i4] = Ws[1] \ cs[:,i2,i3,i4]
+        end
+        for i4 in 1:n[4], i3 in 1:n[3], i1 in 1:n[1]
+            cs[i1,:,i3,i4] = Ws[2] \ cs[i1,:,i3,i4]
+        end
+        for i4 in 1:n[4], i2 in 1:n[2], i1 in 1:n[1]
+            cs[i1,i2,:,i4] = Ws[3] \ cs[i1,i2,:,i4]
+        end
+        for i3 in 1:n[3], i2 in 1:n[2], i1 in 1:n[1]
+            cs[i1,i2,i3,:] = Ws[4] \ cs[i1,i2,i3,:]
         end
     else
         @assert false
@@ -538,42 +602,46 @@ function approximate_delta(::Type{U}, par::Par{D,T},
         fs[ic] = U(basis(par, i, x))
     end
 
-    Winvs = ntuple(D) do d
+    Ws = ntuple(D) do d
         # We know the overlaps of the support of the basis functions
         dv = [dot_basis(par, d, i, i) for i in 0:par.n[d]-1]
         ev = [dot_basis(par, d, i, i+1) for i in 0:par.n[d]-2]
-        W = SymTridiagonal(dv, ev)
-        inv(W)
+        SymTridiagonal(dv, ev)
     end
 
+    n = par.n
+    cs = fs
     if D == 1
-        Winv1 = Winvs[1]
-        @tensor begin
-            cs[i1] := Winv1[i1,j1] * fs[j1]
-        end
+        cs[:] = Ws[1] \ cs[:]
     elseif D == 2
-        Winv1 = Winvs[1]
-        Winv2 = Winvs[2]
-        @tensor begin
-            cs[i1,i2] := Winv1[i1,j1] * Winv2[i2,j2] * fs[j1,j2]
+        for i2 in 1:n[2]
+            cs[:,i2] = Ws[1] \ cs[:,i2]
+        end
+        for i1 in 1:n[1]
+            cs[i1,:] = Ws[2] \ cs[i1,:]
         end
     elseif D == 3
-        Winv1 = Winvs[1]
-        Winv2 = Winvs[2]
-        Winv3 = Winvs[3]
-        @tensor begin
-            cs[i1,i2,i3] :=
-                Winv1[i1,j1] * Winv2[i2,j2] * Winv3[i3,j3] * fs[j1,j2,j3]
+        for i3 in 1:n[3], i2 in 1:n[2]
+            cs[:,i2,i3] = Ws[1] \ cs[:,i2,i3]
+        end
+        for i3 in 1:n[3], i1 in 1:n[1]
+            cs[i1,:,i3] = Ws[2] \ cs[i1,:,i3]
+        end
+        for i2 in 1:n[2], i1 in 1:n[1]
+            cs[i1,i2,:] = Ws[3] \ cs[i1,i2,:]
         end
     elseif D == 4
-        Winv1 = Winvs[1]
-        Winv2 = Winvs[2]
-        Winv3 = Winvs[3]
-        Winv4 = Winvs[4]
-        @tensor begin
-            cs[i1,i2,i3,i4] :=
-                (Winv1[i1,j1] * Winv2[i2,j2] * Winv3[i3,j3] * Winv4[i4,j4] *
-                fs[j1,j2,j3,j4])
+        for i4 in 1:n[4], i3 in 1:n[3], i2 in 1:n[2]
+            cs[:,i2,i3,i4] = Ws[1] \ cs[:,i2,i3,i4]
+        end
+        for i4 in 1:n[4], i3 in 1:n[3], i1 in 1:n[1]
+            cs[i1,:,i3,i4] = Ws[2] \ cs[i1,:,i3,i4]
+        end
+        for i4 in 1:n[4], i2 in 1:n[2], i1 in 1:n[1]
+            cs[i1,i2,:,i4] = Ws[3] \ cs[i1,i2,:,i4]
+        end
+        for i3 in 1:n[3], i2 in 1:n[2], i1 in 1:n[1]
+            cs[i1,i2,i3,:] = Ws[4] \ cs[i1,i2,i3,:]
         end
     else
         @assert false
@@ -749,35 +817,13 @@ end
 
 # Op is a vector space
 
-function Base.zero(::Type{Op{D,T,U}}, par::Par{D,T})::Op{D,T,U} where
+function Base.zeros(::Type{Op{D,T,U}}, par::Par{D,T})::Op{D,T,U} where
         {D, T, U<:Number}
     len = prod(par.n)
     mat = spzeros(U, len, len)
     Op{D,T,U}(par, mat)
 end
-function Base.one(::Type{Op{D,T,U}}, par::Par{D,T})::Op{D,T,U} where
-        {D, T, U<:Number}
-    n = par.n
-
-    str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
-    len = prod(n)
-    idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
-
-    I = Int[]
-    J = Int[]
-    V = U[]
-    function ins!(i, j, v)
-        push!(I, idx(i))
-        push!(J, idx(j))
-        push!(V, v)
-    end
-    for ic in CartesianIndices(par.n.elts)
-        i = Vec(ic.I) .- 1
-        ins!(i, i, U(1))
-    end
-    mat = sparse(I, J, V, len, len)
-    Op{D,T,U}(par, mat)
-end
+convert
 
 function Base.:+(A::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U<:Number}
     Op{D,T,U}(A.par, +A.mat)
@@ -823,6 +869,34 @@ function Base.:*(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where
 end
 
 
+
+function Base.zero(::Type{Op{D,T,U}}, par::Par{D,T})::Op{D,T,U} where
+        {D, T, U<:Number}
+    zeros(Op{D,T,U}, par)
+end
+function Base.one(::Type{Op{D,T,U}}, par::Par{D,T})::Op{D,T,U} where
+        {D, T, U<:Number}
+    n = par.n
+
+    str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
+    len = prod(n)
+    idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
+
+    I = Int[]
+    J = Int[]
+    V = U[]
+    function ins!(i, j, v)
+        push!(I, idx(i))
+        push!(J, idx(j))
+        push!(V, v)
+    end
+    for ic in CartesianIndices(par.n.elts)
+        i = Vec(ic.I) .- 1
+        ins!(i, i, U(1))
+    end
+    mat = sparse(I, J, V, len, len)
+    Op{D,T,U}(par, mat)
+end
 
 function Base.:*(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where
         {D, T, U<:Number}
@@ -871,6 +945,35 @@ end
 #     sol = reshape(op.mat \ (proj * reshape(rhs.coeffs, :)), par.n.elts)
 #     Fun{D,T,U}(par, sol)
 # end
+
+
+
+# Note: These work for boundary conditions, but not for initial
+# conditions. The matrices / RHS vectors have rows that are off by one
+# for initial conditions.
+export mix_op_bc
+function mix_op_bc(bnd::Op{D,T,U},
+                   iop::Op{D,T,U}, bop::Op{D,T,U})::Op{D,T,U} where
+        {D, T<:Number, U<:Number}
+    par = bnd.par
+    @assert iop.par == par
+    @assert bop.par == par
+
+    id = one(Op{D,T,U}, par)
+    int = id - bnd
+    int * iop + bnd * bop
+end
+function mix_op_bc(bnd::Op{D,T,U},
+                   rhs::Fun{D,T,U}, bvals::Fun{D,T,U})::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    par = bnd.par
+    @assert rhs.par == par
+    @assert bvals.par == par
+
+    id = one(Op{D,T,U}, par)
+    int = id - bnd
+    int * rhs + bnd * bvals
+end
 
 
 
@@ -1036,30 +1139,44 @@ function dAlembert(::Type{U}, par::Par{D,T})::Op{D,T,U} where
     Op{D,T,U}(par, mat)
 end
 
-
-
-export mix_op_bc
-function mix_op_bc(bnd::Op{D,T,U},
-                   iop::Op{D,T,U}, bop::Op{D,T,U})::Op{D,T,U} where
+export solve_dAlembert_Dirichlet
+function solve_dAlembert_Dirichlet(pot::Fun{D,T,U},
+                                   bvals::Fun{D,T,U})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    par = bnd.par
-    @assert iop.par == par
-    @assert bop.par == par
-
-    id = one(Op{D,T,U}, par)
-    int = id - bnd
-    int * iop + bnd * bop
-end
-function mix_op_bc(bnd::Op{D,T,U},
-                   rhs::Fun{D,T,U}, bvals::Fun{D,T,U})::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
-    par = bnd.par
-    @assert rhs.par == par
+    par = pot.par
     @assert bvals.par == par
 
-    id = one(Op{D,T,U}, par)
-    int = id - bnd
-    int * rhs + bnd * bvals
+    n = par.n
+    dx2 = Vec(ntuple(d -> ((par.xmax[d] - par.xmin[d]) / (n[d] - 1)) ^ 2, D))
+
+    sol = similar(pot.coeffs)
+    if D == 4
+        # Initial and boundary conditions
+        sol[1,:,:,:] = bvals.coeffs[1,:,:,:]
+        sol[end,:,:,:] = bvals.coeffs[end,:,:,:]
+        sol[:,1,:,:] = bvals.coeffs[:,1,:,:]
+        sol[:,end,:,:] = bvals.coeffs[:,end,:,:]
+        sol[:,:,1,:] = bvals.coeffs[:,:,1,:]
+        sol[:,:,end,:] = bvals.coeffs[:,:,end,:]
+        sol[:,:,:,1] = bvals.coeffs[:,:,:,1]
+        sol[:,:,:,2] = bvals.coeffs[:,:,:,2]
+        # d'Alembert operator
+        for i4=2:n[4]-1
+            for i3=2:n[3]-1, i2=2:n[2]-1, i1=2:n[1]-1
+                sol[i1,i2,i3,i4+1] =
+                    (- sol[i1,i2,i3,i4-1] + 2*sol[i1,i2,i3,i4]
+                     + dx2[4] * (
+                         + (sol[i1-1,i2,i3,i4] - 2*sol[i1,i2,i3,i4] + sol[i1+1,i2,i3,i4]) / dx2[1]
+                         + (sol[i1,i2-1,i3,i4] - 2*sol[i1,i2,i3,i4] + sol[i1,i2+1,i3,i4]) / dx2[2]
+                         + (sol[i1,i2,i3-1,i4] - 2*sol[i1,i2,i3,i4] + sol[i1,i2,i3+1,i4]) / dx2[3]
+                         - pot.coeffs[i1,i2,i3,i4]))
+            end
+        end
+    else
+        @assert false
+    end
+
+    Fun{D,T,U}(par, sol)
 end
 
 end
