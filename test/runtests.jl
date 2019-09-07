@@ -33,7 +33,7 @@ const fsinpi = approximate(sinpiD, Float64, par3)
         maxerr
     end
     maxerr = find_maxerr()
-    @test 0.05 <= maxerr < 0.06
+    @test 0.064 <= maxerr < 0.065
 end
 
 
@@ -47,7 +47,7 @@ end
     fsinpix2 = approximate(sinpiDx, Float64, par3)
     
     maxdiffx = norm(fsinpix1 - fsinpix2, Inf)
-    @test 0.42 <= maxdiffx < 0.43
+    @test 0.44 <= maxdiffx < 0.45
 end
 
 
@@ -61,7 +61,7 @@ end
     fsinpixx2 = approximate(sinpiDxx, Float64, par3)
     
     maxdiffxx = norm(fsinpixx1 - fsinpixx2, Inf)
-    @test 7.3 <= maxdiffxx < 7.4
+    @test 7.1 <= maxdiffxx < 7.2
     
     function sinpiDxy(x::Vec{D,T})::T where {D,T}
         pi^2 * cospi(x[1]) * cospi(x[2]) * prod(sinpi(x[d]) for d in 3:D)
@@ -71,7 +71,7 @@ end
     fsinpixy2 = approximate(sinpiDxy, Float64, par3)
     
     maxdiffxy = norm(fsinpixy1 - fsinpixy2, Inf)
-    @test 2.4 <= maxdiffxy < 2.5
+    @test 2.6 <= maxdiffxy < 2.7
 end
 
 
@@ -104,13 +104,14 @@ const par4 = Par{4,Float64}(9)
         *($(fs...), sinpi(w * x[D]))
     end
 end
+waveD(x) = waveD(Vec(x))
 
 @testset "Scalar wave equation" begin
     pot = zeros(Fun{4,Float64,Float64}, par4)
-    bvals = approximate(waveD, Float64, par4, rtol=1.0e-4)
+    bvals = approximate(waveD, Float64, par4)
     sol = solve_dAlembert_Dirichlet(pot, bvals)
 
     err = sol - bvals
     @show maxerr = norm(err, Inf)
-    @test 0.03 <= maxerr < 0.04
+    @test 0.046 <= maxerr < 0.047
 end

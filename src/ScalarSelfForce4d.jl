@@ -1,9 +1,9 @@
 module ScalarSelfForce4d
 
-using HCubature
+# using HCubature
 using LinearAlgebra
 using SparseArrays
-using StaticArrays
+# using StaticArrays
 
 
 
@@ -32,11 +32,17 @@ export quad
     quote
         s = zero(U)
         for i in CartesianIndices(n)
-            x = ntuple(d -> linear(T(0), xmin[d],
-                                   T(n[d]), xmax[d], i[d] - T(1)/2), D)
+            # x = ntuple(d -> linear(T(0), xmin[d],
+            #                        T(n[d]), xmax[d], i[d] - T(1)/2), D)
+            x = tuple($(
+                [:(linear(T(0), xmin[$d],
+                          T(n[$d]), xmax[$d], i[$d] - T(1)/2))
+                 for d in 1:D]...))
             s += f(x)
         end
-        w = U(*($([:((xmax[$d] - xmin[$d]) / n[$d]) for d in 1:D]...)))
+        # w = U(prod(ntuple(d -> (xmax[d] - xmin[d]) / n[d], D)))
+        w = U(*($(
+            [:((xmax[$d] - xmin[$d]) / n[$d]) for d in 1:D]...)))
         w * s
     end
 end
@@ -521,25 +527,37 @@ function approximate(fun, ::Type{U}, par::Par{D,T};
         end
         f = U(0)
         if active(i)
-            # Integrate piecewise
-            for jc in CartesianIndices(ntuple(d -> 0:1, D))
-                ij = i + Vec(jc.I) .- 1
-                if all(ij .>= 0) && all(ij .< par.n .- 1)
-                    x0 = Vec{D,T}(ntuple(d -> linear(
-                        0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]), D))
-                    x1 = Vec{D,T}(ntuple(d -> linear(
-                        0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]+1), D))
-                    function kernel(x0)::U
-                        x = Vec{D,T}(Tuple(x0))
-                        U(fun(x)) * U(basis(par, i, x))
-                    end
-                    r, e = hcubature(kernel,
-                                     SVector{D,S}(SVector{D,T}(x0.elts)),
-                                     SVector{D,S}(SVector{D,T}(x1.elts)),
-                                     rtol=rtol)
-                    f += r
-                end
+            # # Integrate piecewise
+            # for jc in CartesianIndices(ntuple(d -> 0:1, D))
+            #     ij = i + Vec(jc.I) .- 1
+            #     if all(ij .>= 0) && all(ij .< par.n .- 1)
+            #         x0 = Vec{D,T}(ntuple(d -> linear(
+            #             0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]), D))
+            #         x1 = Vec{D,T}(ntuple(d -> linear(
+            #             0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]+1), D))
+            #         function kernel(x0)::U
+            #             x = Vec{D,T}(Tuple(x0))
+            #             U(fun(x)) * U(basis(par, i, x))
+            #         end
+            #         r, e = hcubature(kernel,
+            #                          SVector{D,S}(SVector{D,T}(x0.elts)),
+            #                          SVector{D,S}(SVector{D,T}(x1.elts)),
+            #                          rtol=rtol)
+            #         f += r
+            #     end
+            # end
+            function kernel(x0::NTuple{D})::U
+                x = Vec{D,T}(x0)
+                U(fun(x)) * U(basis(par, i, x))
             end
+            x0 = Vec{D,T}(ntuple(d -> linear(
+                0, par.xmin[d], par.n[d]-1, par.xmax[d],
+                max(0, i[d]-1)), D))
+            x1 = Vec{D,T}(ntuple(d -> linear(
+                0, par.xmin[d], par.n[d]-1, par.xmax[d],
+                min(par.n[d]-1, i[d]+1)), D))
+            n = Vec{D,Int}(ntuple(d -> 8, D))
+            f = quad(kernel, U, x0.elts, x1.elts, n.elts)
         end
         fs[ic] = f
     end
