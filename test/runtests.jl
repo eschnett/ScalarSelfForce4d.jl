@@ -112,6 +112,35 @@ waveD(x) = waveD(Vec(x))
     sol = solve_dAlembert_Dirichlet(pot, bvals)
 
     err = sol - bvals
-    @show maxerr = norm(err, Inf)
+    maxerr = norm(err, Inf)
     @test 0.046 <= maxerr < 0.047
+end
+
+@testset "Scalar wave equation with singularity" begin
+    @assert all(par4.n[d] == par3.n[d] for d in 1:3)
+
+    lap3 = laplace(Float64, par3)
+    del3 = 2pi * approximate_delta(Float64, par3, Vec((0.0, 0.0, 0.0)))
+    dir3 = dirichlet(Float64, par3)
+    bvals3 = zeros(typeof(del3), par3)
+
+    bnd3 = boundary(Float64, par3)
+    op3 = mix_op_bc(bnd3, lap3, dir3)
+    rhs3 = mix_op_bc(bnd3, del3, bvals3)
+    pot3 = op3 \ rhs3
+
+    pot = zeros(Fun{4,Float64,Float64}, par4)
+    for i4 in 1:par4.n[4]
+        pot.coeffs[:,:,:,i4] = del3.coeffs[:,:,:]
+    end
+    bvals = zeros(Fun{4,Float64,Float64}, par4)
+    for i4 in 1:par4.n[4]
+        bvals.coeffs[:,:,:,i4] = pot3.coeffs[:,:,:]
+    end
+
+    sol = solve_dAlembert_Dirichlet(pot, bvals)
+
+    err = sol - bvals
+    maxerr = norm(err, Inf)
+    @test maxerr < 1.0e-12
 end
