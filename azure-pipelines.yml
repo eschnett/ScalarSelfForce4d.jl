@@ -55,7 +55,7 @@ jobs:
 
   steps:
   - powershell: |
-      wget https://julialang-s3.julialang.org/bin/winnt/x64/1.02julia-$(JULIA_VERSION)-win64.exe -OutFile julia-$(JULIA_VERSION)-win64.exe
+      wget https://julialang-s3.julialang.org/bin/winnt/x64/1.2/julia-$(JULIA_VERSION)-win64.exe -OutFile julia-$(JULIA_VERSION)-win64.exe
       Start-Process -FilePath .\julia-$(JULIA_VERSION)-win64.exe -ArgumentList "/S /D=C:\julia" -NoNewWindow -Wait
     displayName: 'Download and extract Julia 1.2'
 
