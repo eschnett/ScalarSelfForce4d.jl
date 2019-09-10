@@ -6,9 +6,13 @@ using Test
 
 
 const par3 = Par{3,Float64}(9)
+const spar3 = makestaggered(par3)
 
 @testset "Parameters" begin
+    @test all(!staggered(par3))
     @test all(par3.n .== 9)
+    @test all(staggered(spar3))
+    @test all(spar3.n .== 8)
 end
 
 
@@ -94,8 +98,6 @@ end
 
 
 
-const par4 = Par{4,Float64}(9)
-
 @generated function waveD(x::Vec{D,T})::T where {D,T}
     fs = [:(sinpi(x[$d])) for d in 1:D-1]
     quote
@@ -104,7 +106,58 @@ const par4 = Par{4,Float64}(9)
         *($(fs...), sinpi(w * x[D]))
     end
 end
-waveD(x) = waveD(Vec(x))
+
+function epsD(spar::Par{D,T,Val{Staggered}}, x::Vec{D,T})::T where
+        {D,T,Staggered}
+    w = sqrt(T(D-1))
+    if D == 2
+        phix = pi * cospi(x[1]) * sinpi(w * x[2])
+        phit = pi * w * sinpi(x[1]) * cospi(w * x[2])
+        eps = (phix^2 + phit^2) / 2
+    elseif D == 4
+        phi = sinpi(x[1]) * sinpi(x[2]) * sinpi(x[3]) * sinpi(w * x[4])
+        phix = pi * cospi(x[1]) * sinpi(x[2]) * sinpi(x[3]) * sinpi(w * x[4])
+        phiy = pi * sinpi(x[1]) * cospi(x[2]) * sinpi(x[3]) * sinpi(w * x[4])
+        phiz = pi * sinpi(x[1]) * sinpi(x[2]) * cospi(x[3]) * sinpi(w * x[4])
+        phit = pi * w * sinpi(x[1]) * sinpi(x[2]) * sinpi(x[3]) * cospi(w * x[4])
+        eps = (phix^2 + phiy^2 + phiz^2 + phit^2) / 2
+    else
+        @assert false
+    end
+    eps
+end
+
+const par2 = Par{2,Float64}(9)
+const spar2 = makestaggered(par2)
+
+@testset "Energy density of scalar wave" begin
+    phi = approximate(waveD, Float64, par2)
+    eps = scalarwave_energy(phi)
+
+    epsD1(x) = epsD(spar2, x)
+    eps0 = approximate(epsD1, Float64, spar2)
+    err = eps - eps0
+    maxerr = norm(err, Inf)
+    @test 0.21 <= maxerr < 0.22
+end
+
+
+
+const par4 = Par{4,Float64}(9)
+const spar4 = makestaggered(par4)
+
+#TODO @testset "Energy density of scalar wave" begin
+#TODO     phi = approximate(waveD, Float64, par4)
+#TODO     eps = scalarwave_energy(phi)
+#TODO 
+#TODO     epsD1(x) = epsD(spar4, x)
+#TODO     eps0 = approximate(epsD1, Float64, spar4)
+#TODO     err = eps - eps0
+#TODO     @show maxerr = norm(err, Inf)
+#TODO     @test 0.046 <= maxerr < 0.047
+#TODO end
+
+
 
 @testset "Scalar wave equation" begin
     pot = zeros(Fun{4,Float64,Float64}, par4)

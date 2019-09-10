@@ -24,6 +24,15 @@ function linear(x0::T, y0::U, x1::T, y1::U, x::T)::U where
     U(x - x1) / U(x0 - x1) * y0 + U(x - x0) / U(x1 - x0) * y1
 end
 
+# Characteristic function
+export characteristic
+function characteristic(::Type{U}, x0::T, x1::T, x::T)::U where
+        {T<:Number, U<:Number}
+    (x < x0 || x > x1) && return U(0)
+    (x == x0 || x == x1) && return U(1)/2
+    return U(1)
+end
+
 # Numerical quadrature
 export quad
 @generated function quad(f, ::Type{U},
@@ -222,20 +231,35 @@ end
 # Run-time parameters
 
 export Par
-struct Par{D,T<:Number}
+struct Par{D, T<:Number, Staggered<:Val}
+    # Actual number of vertices or cells; for the same dx, n[vc] =
+    # n[cc] + 1
     n::Vec{D,Int}
+    # Domain boundary; vertices lie on the boundary, cell centres lie
+    # dx/2 inwards
     xmin::Vec{D,T}
     xmax::Vec{D,T}
 end
 
 function (::Type{Par{D,T}})(n::Int) where {D, T}
-    Par{D,T}(Vec{D,Int}(ntuple(d -> n, D)),
-             Vec{D,T}(ntuple(d -> d<4 ? -1 : 0, D)),
-             Vec{D,T}(ntuple(d -> 1, D)))
+    Staggered = Vec(ntuple(d -> false, D))
+    Par{D, T, Val{Staggered}}(Vec{D,Int}(ntuple(d -> n, D)),
+                              Vec{D,T}(ntuple(d -> d<4 ? -1 : 0, D)),
+                              Vec{D,T}(ntuple(d -> 1, D)))
 end
 
-function (::Type{Par{T}})(n::Int) where {T}
-    Par{4,T}(n)
+export staggered
+function staggered(::Par{D, T, Val{Staggered}})::Vec{D,Bool} where
+        {D, T, Staggered}
+    Staggered
+end
+
+export makestaggered
+function makestaggered(par::Par{D, T, Val{Staggered}})::Par{D,T} where
+        {D, T, Staggered}
+    @assert all(!Staggered)
+    spar = Par{D, T, Val{!Staggered}}(par.n .- 1, par.xmin, par.xmax)
+    spar
 end
 
 
@@ -245,65 +269,102 @@ end
 # Basis functions and collocation points
 
 # Coordinates of collocation points
-export coords
-function coords(par::Par{D,T}, d::Int)::Vector{T} where {D, T<:Number}
-    T[linear(1, par.xmin[d], par.n[d], par.xmax[d], i) for i in 1:par.n[d]]
+export coord
+function coord(par::Par{D,T,Val{Staggered}}, d::Int, i::Union{Int,T})::T where
+        {D, T<:Number, Staggered}
+    if Staggered[d]
+        j = T(i) + T(1)/2
+        @assert 0 <= j <= par.n[d]
+        linear(T(0), par.xmin[d], T(par.n[d]), par.xmax[d], j)
+    else
+        @assert 0 <= i <= par.n[d] - 1
+        linear(T(0), par.xmin[d], T(par.n[d]-1), par.xmax[d], T(i))
+    end
 end
-function coords(par::Par{D,T})::NTuple{D, Vector{T}} where {D, T<:Number}
+
+export coords
+function coords(par::Par{D,T,Val{Staggered}}, d::Int)::Vector{T} where
+        {D, T<:Number, Staggered}
+    T[coord(par, d, i) for i in 0:par.n[d]-1]
+end
+function coords(par::Par{D,T,Val{Staggered}})::NTuple{D, Vector{T}} where
+        {D, T<:Number, Staggered}
     ntuple(d -> coords(par, d) for d in 1:D)
 end
 
 # Basis functions
 export basis
-function basis(par::Par{D,T}, d::Int, i::Int, x::T)::T where {D, T<:Number}
+function basis(par::Par{D,T,Val{Staggered}}, d::Int, i::Int, x::T)::T where
+        {D, T<:Number, Staggered}
     @assert i>=0 && i<par.n[d]
-    fm = linear(par.xmin[d], T(1 - i), par.xmax[d], T(1 + par.n[d] - 1 - i), x)
-    fp = linear(par.xmin[d], T(1 + i), par.xmax[d], T(1 - par.n[d] + 1 + i), x)
-    f0 = T(0)
-    max(f0, min(fm, fp))
+    if Staggered[d]
+        x0 = coord(par, d, T(i) - T(1)/2)
+        x1 = coord(par, d, T(i) + T(1)/2)
+        characteristic(T, x0, x1, x)
+    else
+        fm = linear(par.xmin[d], T(1 - i), par.xmax[d], T(1 + par.n[d] - 1 - i),
+                    x)
+        fp = linear(par.xmin[d], T(1 + i), par.xmax[d], T(1 - par.n[d] + 1 + i),
+                    x)
+        f0 = T(0)
+        max(f0, min(fm, fp))
+    end
 end
-function basis(par::Par{D,T}, i::Vec{D,Int}, x::Vec{D,T})::T where
-        {D, T<:Number}
+function basis(par::Par{D,T,Val{Staggered}}, i::Vec{D,Int},
+               x::Vec{D,T})::T where
+        {D, T<:Number, Staggered}
     prod(basis(par, d, i[d], x[d]) for d in 1:D)
 end
 
 # Dot product between basis functions
-function dot_basis(par::Par{D,T}, d::Int, i::Int, j::Int)::T where
-        {D, T<:Number}
+function dot_basis(par::Par{D,T,Val{Staggered}}, d::Int,
+                   i::Int, j::Int)::T where
+        {D, T<:Number, Staggered}
     n = par.n[d]
     @assert i>=0 && i<n
     @assert j>=0 && j<n
-    dx = (par.xmax[d] - par.xmin[d]) / (n - 1)
-    if j == i-1
-        return dx/6
-    elseif j == i
-        if i == 0 || i == n-1
-            return dx/3
-        else
-            return T(2)/3*dx
-        end
-    elseif j == i+1
-        return dx/6
+    if Staggered[d]
+        return T(i == j)
     else
-        return T(0)
+        dx = (par.xmax[d] - par.xmin[d]) / (n - 1)
+        if j == i-1
+            return dx/6
+        elseif j == i
+            if i == 0 || i == n-1
+                return dx/3
+            else
+                return T(2)/3*dx
+            end
+        elseif j == i+1
+            return dx/6
+        else
+            return T(0)
+        end
     end
 end
 
 # Integration weighs for basis functions (assuming a diagonal weight matrix)
 export weight
-function weight(par::Par{D,T}, i::Int)::T where {D, T<:Number}
+function weight(par::Par{D,T,Val{Staggered}}, d::Int, i::Int)::T where
+        {D, T<:Number, Staggered}
     n = par.n[d]
     @assert i>=0 && i<n
-    dx = (par.xmax[d] - par.xmin[d]) / (n - 1)
-    if i == 0
-        return dx/2
-    elseif i < n-1
+    if Staggered[d]
+        dx = (par.xmax[d] - par.xmin[d]) / n
         return dx
     else
-        return dx/2
+        dx = (par.xmax[d] - par.xmin[d]) / (n - 1)
+        if i == 0
+            return dx/2
+        elseif i < n-1
+            return dx
+        else
+            return dx/2
+        end
     end
 end
-function weight(par::Par{D,T}, i::Vec{D,Int})::T where {D, T<:Number}
+function weight(par::Par{D,T,Val{Staggered}}, i::Vec{D,Int})::T where
+        {D, T<:Number, Staggered}
     prod(weight(par, i[d]) for d in 1:D)
 end
 
@@ -424,10 +485,8 @@ function Base.min(f::Fun{D,T,U})::T where {D, T<:Number, U<:Number}
 end
 function Base.sum(f::Fun{D,T,U})::T where {D, T<:Number, U<:Number}
     Ws = ntuple(D) do d
-        # We know the overlaps of the support of the basis functions
-        dv = [dot_basis(par, d, i, i) for i in 0:par.n[d]-1]
-        ev = [dot_basis(par, d, i, i+1) for i in 0:par.n[d]-2]
-        SymTridiagonal(dv, ev)
+        ws = [weight(par, d, i) for i in 0:par.n[d]-1]
+        Diagonal(ws)
     end
 
     n = par.n
@@ -477,7 +536,13 @@ end
 
 function fidentity(::Type{U}, par::Par{1,T})::Fun{1,T,U} where
         {T<:Number, U<:Number}
-    cs = LinRange(U(par.xmin[1]), U(par.xmax[1]), par.n[1])
+    if staggered(par)[1]
+        dx = (par.xmax[1] - par.xmin[1]) / par.n[1]
+        cs = LinRange(U(par.xmin[1] + dx[1]/2), U(par.xmax[1] - dx[1]/2),
+                      par.n[1])
+    else
+        cs = LinRange(U(par.xmin[1]), U(par.xmax[1]), par.n[1])
+    end
     Fun{1,T,U}(par, cs)
 end
 
@@ -495,17 +560,20 @@ end
 
 # Create a discretized function by projecting onto the basis functions
 export approximate
-function approximate(fun, ::Type{U}, par::Par{D,T};
-                     # mask::Union{Nothing, Op{D,T,U}}=nothing,
-                     mask=nothing,
-                     rtol::Real=0)::Fun{D,T,U} where
+function approximate(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    S = eltype(U)
-    if rtol == 0
-        rtol = sqrt(S(max(eps(T), eps(S))))
+    if all(!staggered(par))
+        approximate_vc(fun, U, par)
+    elseif all(staggered(par))
+        approximate_cc(fun, U, par)
     else
-        rtol = S(rtol)
+        @assert false
     end
+end
+
+function approximate_vc(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    @assert all(!staggered(par))
 
     str = Vec{D,Int}(ntuple(dir ->
                             dir==1 ? 1 : prod(par.n[d] for d in 1:dir-1), D))
@@ -517,48 +585,21 @@ function approximate(fun, ::Type{U}, par::Par{D,T};
     end
 
     fs = Array{U,D}(undef, par.n.elts)
-    t0 = Libc.time()
     for ic in CartesianIndices(size(fs))
         i = Vec(ic.I) .- 1
-        t1 = Libc.time()
-        if t1 >= t0 + 10
-            pct = round(idx(i) / len * 100, digits=1)
-            t0 = t1
-        end
         f = U(0)
-        if active(i)
-            # # Integrate piecewise
-            # for jc in CartesianIndices(ntuple(d -> 0:1, D))
-            #     ij = i + Vec(jc.I) .- 1
-            #     if all(ij .>= 0) && all(ij .< par.n .- 1)
-            #         x0 = Vec{D,T}(ntuple(d -> linear(
-            #             0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]), D))
-            #         x1 = Vec{D,T}(ntuple(d -> linear(
-            #             0, par.xmin[d], par.n[d]-1, par.xmax[d], ij[d]+1), D))
-            #         function kernel(x0)::U
-            #             x = Vec{D,T}(Tuple(x0))
-            #             U(fun(x)) * U(basis(par, i, x))
-            #         end
-            #         r, e = hcubature(kernel,
-            #                          SVector{D,S}(SVector{D,T}(x0.elts)),
-            #                          SVector{D,S}(SVector{D,T}(x1.elts)),
-            #                          rtol=rtol)
-            #         f += r
-            #     end
-            # end
-            function kernel(x0::NTuple{D})::U
-                x = Vec{D,T}(x0)
-                U(fun(x)) * U(basis(par, i, x))
-            end
-            x0 = Vec{D,T}(ntuple(d -> linear(
-                0, par.xmin[d], par.n[d]-1, par.xmax[d],
-                max(0, i[d]-1)), D))
-            x1 = Vec{D,T}(ntuple(d -> linear(
-                0, par.xmin[d], par.n[d]-1, par.xmax[d],
-                min(par.n[d]-1, i[d]+1)), D))
-            n = Vec{D,Int}(ntuple(d -> 8, D))
-            f = quad(kernel, U, x0.elts, x1.elts, n.elts)
+        function kernel(x0::NTuple{D})::U
+            x = Vec{D,T}(x0)
+            U(fun(x)) * U(basis(par, i, x))
         end
+        x0 = Vec{D,T}(ntuple(d -> linear(
+            0, par.xmin[d], par.n[d]-1, par.xmax[d],
+            max(0, i[d]-1)), D))
+        x1 = Vec{D,T}(ntuple(d -> linear(
+            0, par.xmin[d], par.n[d]-1, par.xmax[d],
+            min(par.n[d]-1, i[d]+1)), D))
+        n = Vec{D,Int}(ntuple(d -> 8, D))
+        f = quad(kernel, U, x0.elts, x1.elts, n.elts)
         fs[ic] = f
     end
 
@@ -609,11 +650,48 @@ function approximate(fun, ::Type{U}, par::Par{D,T};
     return Fun{D,T,U}(par, cs)
 end
 
+function approximate_cc(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
+        {D, T<:Number, U<:Number}
+    @assert all(staggered(par))
+
+    str = Vec{D,Int}(ntuple(dir ->
+                            dir==1 ? 1 : prod(par.n[d] for d in 1:dir-1), D))
+    len = prod(par.n)
+    idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
+    function active(i::Vec{D,Int})::Bool
+        mask === nothing && return true
+        mask.mat[idx(i), idx(i)] != 0
+    end
+
+    fs = Array{U,D}(undef, par.n.elts)
+    for ic in CartesianIndices(size(fs))
+        i = Vec(ic.I) .- 1
+        f = U(0)
+        function kernel(x0::NTuple{D})::U
+            x = Vec{D,T}(x0)
+            U(fun(x))
+        end
+        x0 = Vec{D,T}(ntuple(d -> linear(
+            T(0), par.xmin[d], T(par.n[d]), par.xmax[d], T(i[d])), D))
+        x1 = Vec{D,T}(ntuple(d -> linear(
+            T(-1), par.xmin[d], T(par.n[d]-1), par.xmax[d], T(i[d])), D))
+        n = Vec{D,Int}(ntuple(d -> 8, D))
+        f = quad(kernel, U, x0.elts, x1.elts, n.elts)
+        fs[ic] = f
+    end
+
+    return Fun{D,T,U}(par, fs)
+end
+
+
+
 # Approximate a delta function
 export approximate_delta
 function approximate_delta(::Type{U}, par::Par{D,T},
                            x::Vec{D,T})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
+    @assert !any(staggered(par)) # TODO
+
     fs = Array{U,D}(undef, par.n.elts)
     for ic in CartesianIndices(size(fs))
         i = Vec(ic.I) .- 1
@@ -676,6 +754,7 @@ end
 # Derivative of basis functions   dϕ^i/dϕ^j
 function deriv_basis(par::Par{D,T}, d::Int, i::Int, j::Int)::T where
         {D, T<:Number}
+    @assert !any(staggered(par)) # TODO
     dx = (fun.par.xmax[d] - fun.par.xmin[d]) / (fun.par.n[d] - 1)
     if i == 0
         if j == i
@@ -703,6 +782,7 @@ end
 
 export deriv
 function deriv(par::Par{D,T}, d::Int)::Tridiagonal{T} where {D, T<:Number}
+    @assert !any(staggered(par)) # TODO
     # We know the overlaps of the support of the basis functions
     n = par.n[d] - 1
     dlv = [deriv_basis(par, d, i, i-1) for i in 1:n]
@@ -716,10 +796,13 @@ end
 function deriv(fun::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
     @assert 1 <= dir <= D
+    @assert !any(staggered(fun.par)) # TODO
     dx = (fun.par.xmax[dir] - fun.par.xmin[dir]) / (fun.par.n[dir] - 1)
     cs = fun.coeffs
     dcs = similar(cs)
     n = size(dcs, dir)
+
+    # TODO: use linear Cartesian index, calculate di
 
     inner_indices = CartesianIndices(ntuple(d -> size(dcs,d), dir - 1))
     outer_indices = CartesianIndices(ntuple(d -> size(dcs,dir+d), D - dir))
@@ -745,6 +828,7 @@ export deriv2
 function deriv2(fun::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
     @assert 1 <= dir <= D
+    @assert !any(staggered(fun.par)) # TODO
     dx2 = ((fun.par.xmax[dir] - fun.par.xmin[dir]) / (fun.par.n[dir] - 1)) ^ 2
     cs = fun.coeffs
     dcs = similar(cs)
@@ -1028,6 +1112,7 @@ const dirichlet = boundary
 export laplace
 function laplace(::Type{U}, par::Par{D,T})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
+    @assert !any(staggered(par)) # TODO
     n = par.n
     dx2 = Vec(ntuple(d -> ((par.xmax[d] - par.xmin[d]) / (n[d] - 1)) ^ 2, D))
 
@@ -1070,6 +1155,7 @@ end
 export boundaryIV
 function boundaryIV(::Type{U}, par::Par{D,T})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
+    @assert !any(staggered(par)) # TODO
     n = par.n
 
     str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
@@ -1109,6 +1195,7 @@ const dirichletIV = boundaryIV
 export dAlembert
 function dAlembert(::Type{U}, par::Par{D,T})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
+    @assert !any(staggered(par)) # TODO
     n = par.n
     dx2 = Vec(ntuple(d -> ((par.xmax[d] - par.xmin[d]) / (n[d] - 1)) ^ 2, D))
 
@@ -1163,9 +1250,12 @@ function solve_dAlembert_Dirichlet(pot::Fun{D,T,U},
         {D, T<:Number, U<:Number}
     par = pot.par
     @assert bvals.par == par
+    @assert !any(staggered(par)) # TODO
 
     n = par.n
     dx2 = Vec(ntuple(d -> ((par.xmax[d] - par.xmin[d]) / (n[d] - 1)) ^ 2, D))
+
+    # TODO: use linear Cartesian index, calculate di
 
     sol = similar(pot.coeffs)
     if D == 4
@@ -1195,6 +1285,328 @@ function solve_dAlembert_Dirichlet(pot::Fun{D,T,U},
     end
 
     Fun{D,T,U}(par, sol)
+end
+
+
+
+################################################################################
+
+# Discrete differential forms
+
+# Derivative of a 0-form
+function deriv0(u0::Fun{D,T,U})::NTuple{D,Fun{D,T,U}} where {D,T,U}
+    if D == 2
+        par0 = u0.par
+        s0 = staggered(par0)
+        n0 = par0.n
+        di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
+        dx = ntuple(d -> (par0.xmax[d] - par0.xmin[d]) / (n0[d] - 1), D)
+        @assert s0 == Vec((false, false))
+        s1x = Vec((true, false))
+        s1t = Vec((false, true))
+        n1x = Vec((n0[1]-s1x[1], n0[2]-s1x[2]))
+        n1t = Vec((n0[1]-s1t[1], n0[2]-s1t[2]))
+        par1x = Par{D, T, Val{s1x}}(n1x, par0.xmin, par0.xmax)
+        par1t = Par{D, T, Val{s1t}}(n1t, par0.xmin, par0.xmax)
+        cs0 = u0.coeffs
+        dcs1x = Array{U}(undef, n1x.elts)
+        for i in CartesianIndices(size(dcs1x))
+            dcs1x[i] = (cs0[i + di[1]] - cs0[i]) / dx[1]
+        end
+        dcs1t = Array{U}(undef, n1t.elts)
+        for i in CartesianIndices(size(dcs1t))
+            dcs1t[i] = (cs0[i + di[2]] - cs0[i]) / dx[2]
+        end
+        return (Fun{D,T,U}(par1x, dcs1x), Fun{D,T,U}(par1t, dcs1t))
+    else
+        @assert false
+    end
+end
+
+# Hodge star of a 1-form
+function star1(u1::NTuple{D, Fun{D,T,U}})::NTuple{D, Fun{D,T,U}} where {D,T,U}
+    if D == 2
+        u1x, u1t = u1
+        par1x = u1x.par
+        par1t = u1t.par
+        s1x = staggered(par1x)
+        s1t = staggered(par1t)
+        @assert s1x == Vec((true, false))
+        @assert s1t == Vec((false, true))
+        n1x = par1x.n
+        n1t = par1t.n
+        n = Vec((n1x[1] + s1x[1], n1x[2] + s1x[2]))
+        di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
+        @assert n1x == Vec((n[1] - s1x[1], n[2] - s1x[2]))
+        @assert n1t == Vec((n[1] - s1t[1], n[2] - s1t[2]))
+        cs1x = u1x.coeffs
+        cs1t = u1t.coeffs
+        scs1x = Array{U}(undef, n1x.elts)
+        for i in CartesianIndices(size(scs1x))
+            s = U(0)
+            c = U(0)
+            if i[2] > 1
+                s += cs1t[i-di[2]] + cs1t[i-di[2]+di[1]]
+                c += 2
+            end
+            if i[2] < n[2]
+                s += cs1t[i] + cs1t[i+di[1]]
+                c += 2
+            end
+            scs1x[i] = - s / c
+        end
+        scs1t = Array{U}(undef, n1t.elts) 
+        for i in CartesianIndices(size(scs1t))
+            s = U(0)
+            c = U(0)
+            if i[1] > 1
+                s += cs1x[i-di[1]] + cs1x[i-di[1]+di[2]]
+                c += 2
+            end
+            if i[1] < n[1]
+                s += cs1x[i] + cs1x[i+di[2]]
+                c += 2
+            end
+            scs1t[i] = + s / c
+        end
+        return (Fun{D,T,U}(par1x, scs1x), Fun{D,T,U}(par1t, scs1t))
+   else
+        @assert false
+    end
+end
+
+# Wedge of two 1-forms
+function wedge11(u1::NTuple{D, Fun{D,T,U}},
+                 v1::NTuple{D, Fun{D,T,U}})::Fun{D,T,U} where {D,T,U}
+    if D == 2
+        u1x, u1t = u1
+        v1x, v1t = v1
+        @assert staggered(u1x.par) == Vec((true, false))
+        @assert staggered(u1t.par) == Vec((false, true))
+        @assert staggered(v1x.par) == Vec((true, false))
+        @assert staggered(v1t.par) == Vec((false, true))
+        n = Vec((u1x.par.n[1] + staggered(u1x.par)[1],
+                 u1x.par.n[2] + staggered(u1x.par)[2]))
+        @assert u1x.par.n == Vec((n[1] - staggered(u1x.par)[1],
+                                  n[2] - staggered(u1x.par)[2]))
+        @assert u1t.par.n == Vec((n[1] - staggered(u1t.par)[1],
+                                  n[2] - staggered(u1t.par)[2]))
+        @assert v1x.par.n == Vec((n[1] - staggered(v1x.par)[1],
+                                  n[2] - staggered(v1x.par)[2]))
+        @assert v1t.par.n == Vec((n[1] - staggered(v1t.par)[1],
+                                  n[2] - staggered(v1t.par)[2]))
+        di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
+        ucs1x = u1x.coeffs
+        ucs1t = u1t.coeffs
+        vcs1x = u1x.coeffs
+        vcs1t = u1t.coeffs
+        s2 = Vec((true, true))
+        n2 = Vec((n[1] - s2[1], n[2] - s2[2]))
+        par2 = Par{D,T,Val{s2}}(n2, u1x.par.xmin, u1x.par.xmax)
+        wcs2 = Array{U}(undef, n2.elts)
+        for i in CartesianIndices(size(wcs2))
+            wcs2[i] = (+ (+ ucs1t[i] * vcs1x[i]
+                          + ucs1t[i+di[1]] * vcs1x[i]
+                          + ucs1t[i+di[1]] * vcs1x[i+di[2]]
+                          + ucs1t[i] * vcs1x[i+di[2]])
+                       - (+ ucs1x[i] * vcs1t[i]
+                          + ucs1x[i+di[2]] * vcs1t[i]
+                          + ucs1x[i+di[2]] * vcs1t[i+di[1]]
+                          + ucs1x[i] * vcs1t[i+di[1]])) / 8
+        end
+        return Fun{D,T,U}(par2, wcs2)
+    else
+        @assert false
+    end
+end
+
+
+
+################################################################################
+
+# Scalar wave equation
+
+export scalarwave_energy
+function scalarwave_energy(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T<:Number}
+    @assert all(!staggered(phi.par))
+
+    dphi = deriv0(phi)
+    sdphi = star1(dphi)
+    eps = wedge11(dphi, sdphi)
+
+    eps
+end
+
+function scalarwave_energy1(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T<:Number}
+    @assert all(!staggered(phi.par))
+    spar = makestaggered(phi.par)
+
+    n = spar.n
+    dx = Vec(ntuple(d -> (spar.xmax[d] - spar.xmin[d]) / n[d], D))
+    di = ntuple(dir -> Vec(ntuple(d -> Int(d==dir), D)), D)
+
+    eps = Array{T}(undef, n.elts)
+    if D == 4
+        for ic in CartesianIndices(size(eps))
+            i = Vec(ic.I)
+            s = T(0)
+            # x
+            for c in 0:1, b in 0:1, a in 0:1
+                im = i +         a*di[2] + b*di[3] + c*di[4];
+                ip = i + di[1] + a*di[2] + b*di[3] + c*di[4];
+                s += ((+ phi.coeffs[CartesianIndex(ip.elts)]
+                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[1]) ^2 / 8
+            end
+            # y
+            for c in 0:1, b in 0:1, a in 0:1
+                im = i +         a*di[1] + b*di[3] + c*di[4];
+                ip = i + di[2] + a*di[1] + b*di[3] + c*di[4];
+                s += ((+ phi.coeffs[CartesianIndex(ip.elts)]
+                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[2]) ^2 / 8
+            end
+            # z
+            for c in 0:1, b in 0:1, a in 0:1
+                im = i +         a*di[1] + b*di[2] + c*di[4];
+                ip = i + di[3] + a*di[1] + b*di[2] + c*di[4];
+                s += ((+ phi.coeffs[CartesianIndex(ip.elts)]
+                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[3]) ^2 / 8
+            end
+            # t
+            for c in 0:1, b in 0:1, a in 0:1
+                im = i +         a*di[1] + b*di[2] + c*di[3];
+                ip = i + di[4] + a*di[1] + b*di[2] + c*di[3];
+                s += ((+ phi.coeffs[CartesianIndex(ip.elts)]
+                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[4]) ^2 / 8
+            end
+            eps[ic] = s / 2
+        end
+    else
+        @assert false
+    end
+
+    Fun{D,T,T}(spar, eps)
+end
+
+# Energy conservation:
+#
+# Equations of motion, second order in time:
+# phi[i,j+1] = 2 phi[i,j] - phi[i,j-1] + (phi[i-1,j] - 2 phi[i,j] + phi[i+1,j])
+#            = - phi[i,j-1] + phi[i-1,j] + phi[i+1,j]
+# 
+# Equations of motion, first order in time:
+# psi[i,j]   = phi[i,j+1] - phi[i,j]
+#            = phi[i-1,j] + phi[i+1,j] - phi[i,j] - phi[i,j-1]
+#
+# phi[i,j+1] = phi[i,j] + psi[i,j]
+# psi[i,j+1] = phi[i-1,j+1] + phi[i+1,j+1] - phi[i,j+1] - phi[i,j]
+#            = phi[i-1,j+1] + phi[i+1,j+1] - phi[i,j+1] - phi[i,j+1] + psi[i,j]
+#            = psi[i,j] + phi[i-1,j+1] - 2 phi[i,j+1] + phi[i+1,j+1]
+# 
+# Energy density:
+# 1/2 eps[i,j] = (phi[i+1,j] - phi[i-1,j])^2 + (phi[i,j+1] - phi[i,j-1])^2
+#              = + (phi[i+1,j] - phi[i-1,j])^2
+#                + (2 phi[i,j] + 2 psi[i,j] - phi[i-1,j] - phi[i+1,j])^2
+#              = 4 phi,x[i,j]^2
+#                + 4 psi[i,j]^2 + phi,xx[i,j]^2 + 2 psi[i,j] phi,xx[i,j]
+# 2 eps[i,j] = + psi[i,j]^2
+#              + phi,x[i,j]^2 + 1/4 phi,xx[i,j]^2 + 1/2 psi[i,j] phi,xx[i,j]
+
+# Discrete differential forms:
+#    dphi = [phi[i,j+1] - phi[i,j], phi[i+1,j] - phi[i,j]]
+#
+#    *dphi = 1/4 [+ (dphi_x[i-1,j] + dphi_x[i,j] + dphi_x[i-1,j+1] + dphi_x[i,j+1]),
+#                 - (dphi_t[i,j-1] + dphi_t[i+1,j-1] + dphi_t[i,j] + dphi_t[i+1,j])]
+#
+#    dphi ∧ *dphi = 1/8 (+ dphi_t[i,j] *dphi_x[i,j]
+#                        + dphi_t[i+1,j] *dphi_x[i,j]
+#                        + dphi_t[i,j] *dphi_x[i+1,j]
+#                        + dphi_t[i+1,j] *dphi_x[i+1,j]
+#                        - dphi_x[i,j] *dphi_t[i,j]
+#                        - dphi_x[i,j+1] *dphi_t[i,j]
+#                        - dphi_x[i,j] *dphi_t[i+1,j]
+#                        - dphi_x[i,j+1] *dphi_t[i+1,j])
+#                 = 1/8 (
+
+#    L = 1/2 [(phi[i+1,j] - phi[i,j])^2 - (phi[i,j+1] - phi[i,j])^2]
+# 
+# Lagrangian:
+# 
+
+
+################################################################################
+
+# Particles
+
+# Equations of motion for a point particle (arXiv:1102.0259, (17.1) - (17.8)
+#
+# Variables:
+#    phi(x^a)
+#    m_0, q, m(tau), z^a(tau), u^a(tau)
+# Properties:
+#    u^2    = -1
+#    m(tau) = m_0 - q phi(z^a(tau))
+#    p^a    = m u^a
+# Equations of motion:
+#    a^a       = q/m (eta^ab - u^a u^b) (d_b phi)(z^a)
+#    dz^a/dtau = u^a
+#    du^a/dtau =? a^a
+#    dm/dtau   = -q u^a (d_a phi)(z^a)
+# Action:
+#    dtau = sqrt[- eta_ab dz^a/dlambda dz^b/dlambda] dlambda
+#    S = + 1/2 Int eta^ab (d_a phi) (d_b phi)
+#        - 4 pi q Int phi(x^a) delta(x^a - z^a(tau)) dx^4 dtau
+#        + 4 pi m_0 Int dtau
+#    S = + 1/2 Int eta^ab (d_a phi) (d_b phi)
+#        - 4 pi q Int phi(x^a) delta3(x^a - z^a(t)) dtau/dt dx^4
+#        + 4 pi m_0 Int dtau/dt dt
+# Generalized coordinates:
+#    phi(x^a)
+#    z^a
+# Momenta:
+#    psi(x^a) = d_t phi(x^a) = n^b d_b phi(x^a)
+#    p_a(tau) = 4 pi m dt/dtau u_a(tau)
+#    n^b d_b phi(x^a) + 4 pi m dtau/dt u_a(tau)
+#    n^b d_b phi(x^a) + 4 pi m delta(x^4) dtau/dt u_a(t)
+# Hamiltonian:
+#    H = dphi/dt psi + u^a p_a (dtau/dt)^2 - L
+#    H1 = n^a (d_a phi) n^b (d_b phi) - 1/2 eta^ab (d_a phi) (d_b phi)
+#       = (n^a n^b - 1/2 eta^ab) (d_a phi) (d_b phi)
+#    H2 = 4 pi q phi(x^a) delta(x^a - z^a(tau))
+#    H3 = u^a p_a (dtau/dt)^2 - 4 pi m_0 dtau/dt
+#       = 4 pi m u^a u_a dtau/dt - 4 pi m_0 dtau/dt
+#       = 4 pi (m_0 - q phi(z)) dtau/dt - 4 pi m_0 dtau/dt
+#       = - 4 pi q phi(z) dtau/dt
+
+
+
+export Particle
+struct Particle{D,T}
+    par::Par{D,T}
+    mass::T
+    charge::T
+    pos::Vec{D,T}
+    vel::Vec{D,T}
+end
+
+# TODO: Particle is a vector space
+
+export particle_density
+function particle_density(p::Particle{D,T})::Fun{D,T,T} where {D,T}
+    p.charge * approximate_delta(T, p.par, p.pos)
+end
+
+export particle_acceleration
+function particle_acceleration(p::Particle{D,T},
+                               pot::Fun{D,T,T})::Vec{D,T} where {D,T}
+    par = p.par
+    @assert pot.par == par
+
+    rho = particle_density(p)
+
+    grad_pot = ntuple(d -> deriv(pot, d), D)
+
+    acc = ntuple(d -> sum(rho .* grad_pot[d]), D)
+    Vec{D,T}(acc)
 end
 
 end
