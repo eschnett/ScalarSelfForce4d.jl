@@ -3,6 +3,8 @@ Miscallaneous utilities
 """
 module Defs
 
+
+
 export bitsign
 """
 Inverse of signbit

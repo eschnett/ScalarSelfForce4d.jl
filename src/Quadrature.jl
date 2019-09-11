@@ -3,7 +3,6 @@ Numerical quadrature
 """
 module Quadrature
 
-include("Defs.jl")
 using ..Defs
 
 

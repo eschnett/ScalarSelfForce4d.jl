@@ -9,114 +9,52 @@ using SparseArrays
 include("Defs.jl")
 include("Quadrature.jl")
 include("Vecs.jl")
-
-@reexport using ..Defs
-@reexport using ..Quadrature
-@reexport using ..Vecs
+include("Domains.jl")
 
 
-
-################################################################################
-
-# Run-time parameters
-
-export Par
-struct Par{D, T<:Number, Staggered<:Val}
-    # Actual number of vertices or cells; for the same dx, n[vc] =
-    # n[cc] + 1
-    n::Vec{D,Int}
-    # Domain boundary; vertices lie on the boundary, cell centres lie
-    # dx/2 inwards
-    xmin::Vec{D,T}
-    xmax::Vec{D,T}
-end
-
-function (::Type{Par{D,T}})(n::Int) where {D, T}
-    Staggered = Vec(ntuple(d -> false, D))
-    Par{D, T, Val{Staggered}}(Vec{D,Int}(ntuple(d -> n, D)),
-                              Vec{D,T}(ntuple(d -> d<4 ? -1 : 0, D)),
-                              Vec{D,T}(ntuple(d -> 1, D)))
-end
-
-export staggered
-function staggered(::Par{D, T, Val{Staggered}})::Vec{D,Bool} where
-        {D, T, Staggered}
-    Staggered
-end
-
-export makestaggered
-function makestaggered(par::Par{D, T, Val{Staggered}})::Par{D,T} where
-        {D, T, Staggered}
-    @assert all(!Staggered)
-    spar = Par{D, T, Val{!Staggered}}(par.n .- 1, par.xmin, par.xmax)
-    spar
-end
+@reexport using .Defs
+@reexport using .Domains
+@reexport using .Quadrature
+@reexport using .Vecs
 
 
 
 ################################################################################
 
-# Basis functions and collocation points
 
-# Coordinates of collocation points
-export coord
-function coord(par::Par{D,T,Val{Staggered}}, d::Int, i::Union{Int,T})::T where
-        {D, T<:Number, Staggered}
-    if Staggered[d]
-        j = T(i) + T(1)/2
-        @assert 0 <= j <= par.n[d]
-        linear(T(0), par.xmin[d], T(par.n[d]), par.xmax[d], j)
-    else
-        @assert 0 <= i <= par.n[d] - 1
-        linear(T(0), par.xmin[d], T(par.n[d]-1), par.xmax[d], T(i))
-    end
-end
-
-export coords
-function coords(par::Par{D,T,Val{Staggered}}, d::Int)::Vector{T} where
-        {D, T<:Number, Staggered}
-    T[coord(par, d, i) for i in 0:par.n[d]-1]
-end
-function coords(par::Par{D,T,Val{Staggered}})::NTuple{D, Vector{T}} where
-        {D, T<:Number, Staggered}
-    ntuple(d -> coords(par, d) for d in 1:D)
-end
 
 # Basis functions
 export basis
-function basis(par::Par{D,T,Val{Staggered}}, d::Int, i::Int, x::T)::T where
-        {D, T<:Number, Staggered}
-    @assert i>=0 && i<par.n[d]
-    if Staggered[d]
-        x0 = coord(par, d, T(i) - T(1)/2)
-        x1 = coord(par, d, T(i) + T(1)/2)
+function basis(dom::Domain{D,T}, d::Int, i::Int, x::T)::T where {D, T<:Number}
+    @assert i>=0 && i<dom.n[d]
+    if dom.staggered[d]
+        x0 = coord(dom, d, T(i) - T(1)/2)
+        x1 = coord(dom, d, T(i) + T(1)/2)
         characteristic(T, x0, x1, x)
     else
-        fm = linear(par.xmin[d], T(1 - i), par.xmax[d], T(1 + par.n[d] - 1 - i),
+        fm = linear(dom.xmin[d], T(1 - i), dom.xmax[d], T(1 + dom.n[d] - 1 - i),
                     x)
-        fp = linear(par.xmin[d], T(1 + i), par.xmax[d], T(1 - par.n[d] + 1 + i),
+        fp = linear(dom.xmin[d], T(1 + i), dom.xmax[d], T(1 - dom.n[d] + 1 + i),
                     x)
         f0 = T(0)
         max(f0, min(fm, fp))
     end
 end
-function basis(par::Par{D,T,Val{Staggered}}, i::Vec{D,Int},
-               x::Vec{D,T})::T where
-        {D, T<:Number, Staggered}
-    prod(basis(par, d, i[d], x[d]) for d in 1:D)
+function basis(dom::Domain{D,T}, i::Vec{D,Int}, x::Vec{D,T})::T where
+        {D, T<:Number}
+    prod(basis(dom, d, i[d], x[d]) for d in 1:D)
 end
 
 # Dot product between basis functions
-function dot_basis(par::Par{D,T,Val{Staggered}}, d::Int,
-                   i::Int, j::Int)::T where
-        {D, T<:Number, Staggered}
-    n = par.n[d]
+function dot_basis(dom::Domain{D,T}, d::Int, i::Int, j::Int)::T where
+        {D, T<:Number}
+    n = dom.n[d]
     @assert i>=0 && i<n
     @assert j>=0 && j<n
-    if Staggered[d]
+    if dom.staggered[d]
         return T(i == j)
     else
-        dx = (par.xmax[d] - par.xmin[d]) / (n - 1)
+        dx = (dom.xmax[d] - dom.xmin[d]) / (n - 1)
         if j == i-1
             return dx/6
         elseif j == i
@@ -135,15 +73,14 @@ end
 
 # Integration weighs for basis functions (assuming a diagonal weight matrix)
 export weight
-function weight(par::Par{D,T,Val{Staggered}}, d::Int, i::Int)::T where
-        {D, T<:Number, Staggered}
-    n = par.n[d]
+function weight(dom::Domain{D,T}, d::Int, i::Int)::T where {D, T<:Number}
+    n = dom.n[d]
     @assert i>=0 && i<n
-    if Staggered[d]
-        dx = (par.xmax[d] - par.xmin[d]) / n
+    if dom.staggered[d]
+        dx = (dom.xmax[d] - dom.xmin[d]) / n
         return dx
     else
-        dx = (par.xmax[d] - par.xmin[d]) / (n - 1)
+        dx = (dom.xmax[d] - dom.xmin[d]) / (n - 1)
         if i == 0
             return dx/2
         elseif i < n-1
@@ -153,9 +90,8 @@ function weight(par::Par{D,T,Val{Staggered}}, d::Int, i::Int)::T where
         end
     end
 end
-function weight(par::Par{D,T,Val{Staggered}}, i::Vec{D,Int})::T where
-        {D, T<:Number, Staggered}
-    prod(weight(par, i[d]) for d in 1:D)
+function weight(dom::Domain{D,T}, i::Vec{D,Int})::T where {D, T<:Number}
+    prod(weight(dom, i[d]) for d in 1:D)
 end
 
 
@@ -166,7 +102,7 @@ end
 
 export Fun
 struct Fun{D,T,U} <: DenseArray{T, D}
-    par::Par{D,T}
+    dom::Domain{D,T}
     coeffs::Array{U,D}
 end
 
@@ -190,16 +126,16 @@ function Base.eltype(f::Fun{D,T,U})::Type where {D, T, U}
     U
 end
 function Base.length(f::Fun{D,T,U})::Int where {D, T, U}
-    prod(f.par.n)
+    prod(f.dom.n)
 end
 function Base.ndims(f::Fun{D,T,U})::Int where {D, T, U}
     D
 end
 function Base.size(f::Fun{D,T,U})::NTuple{D,Int} where {D, T, U}
-    f.par.n.elts
+    f.dom.n.elts
 end
 function Base.size(f::Fun{D,T,U}, d)::Int where {D, T, U}
-    prod(f.par.n)
+    prod(f.dom.n)
 end
 
 function Base.getindex(f::Fun{D,T,U}, i::Vec{D,Int})::U where {D, T, U}
@@ -213,53 +149,53 @@ end
 
 # Fun is a vector space
 
-function Base.zeros(::Type{Fun{D,T,U}}, par::Par{D,T})::Fun{D,T,U} where
+function Base.zeros(::Type{Fun{D,T,U}}, dom::Domain{D,T})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    Fun{D,T,U}(par, zeros(U, par.n.elts))
+    Fun{D,T,U}(dom, zeros(U, dom.n.elts))
 end
 
 function Base.:+(f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U<:Number}
-    Fun{D,T,U}(f.par, +f.elts)
+    Fun{D,T,U}(f.dom, +f.elts)
 end
 function Base.:-(f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U<:Number}
-    Fun{D,T,U}(f.par, -f.elts)
+    Fun{D,T,U}(f.dom, -f.elts)
 end
 
 function Base.:+(f::Fun{D,T,U}, g::Fun{D,T,U})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    @assert f.par == g.par
-    Fun{D,T,U}(f.par, f.coeffs + g.coeffs)
+    @assert f.dom == g.dom
+    Fun{D,T,U}(f.dom, f.coeffs + g.coeffs)
 end
 function Base.:-(f::Fun{D,T,U}, g::Fun{D,T,U})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    @assert f.par == g.par
-    Fun{D,T,U}(f.par, f.coeffs - g.coeffs)
+    @assert f.dom == g.dom
+    Fun{D,T,U}(f.dom, f.coeffs - g.coeffs)
 end
 
 function Base.:*(a::Number, f::Fun{D,T,U})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    Fun{D,T,U}(f.par, U(a) * f.coeffs)
+    Fun{D,T,U}(f.dom, U(a) * f.coeffs)
 end
 function Base.:*(f::Fun{D,T,U}, a::Number)::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    Fun{D,T,U}(f.par, f.coeffs * U(a))
+    Fun{D,T,U}(f.dom, f.coeffs * U(a))
 end
 function Base.:\(a::Number, f::Fun{D,T,U})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    Fun{D,T,U}(f.par, U(a) \ f.coeffs)
+    Fun{D,T,U}(f.dom, U(a) \ f.coeffs)
 end
 function Base.:/(f::Fun{D,T,U}, a::Number)::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    Fun{D,T,U}(f.par, f.coeffs / U(a))
+    Fun{D,T,U}(f.dom, f.coeffs / U(a))
 end
 
 # function Base.:.+(f::Fun{D,T,U}, c::U)::Fun{D,T,U} where
 #         {D, T<:Number, U<:Number}
-#     Fun{D,T,U}(f.par, f.coeffs .+ c)
+#     Fun{D,T,U}(f.dom, f.coeffs .+ c)
 # end
 # function Base.:.-(f::Fun{D,T,U}, c::U)::Fun{D,T,U} where
 #         {D, T<:Number, U<:Number}
-#     Fun{D,T,U}(f.par, f.coeffs .- c)
+#     Fun{D,T,U}(f.dom, f.coeffs .- c)
 # end
 
 # function Base.:*(f::Fun{D,T,U}, g::Fun{D,T,U})::U where
@@ -275,11 +211,11 @@ function Base.min(f::Fun{D,T,U})::T where {D, T<:Number, U<:Number}
 end
 function Base.sum(f::Fun{D,T,U})::T where {D, T<:Number, U<:Number}
     Ws = ntuple(D) do d
-        ws = [weight(par, d, i) for i in 0:par.n[d]-1]
+        ws = [weight(dom, d, i) for i in 0:dom.n[d]-1]
         Diagonal(ws)
     end
 
-    n = par.n
+    n = dom.n
     s = U(0)
     if D == 1
         for i1 in 1:n[1]
@@ -318,22 +254,22 @@ end
 
 # TODO: composition
 
-function fconst(par::Par{D,T}, f::U)::Fun{D,T,U} where
+function fconst(dom::Domain{D,T}, f::U)::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    cs = fill(f, par.n.elts)
-    Fun{D,T,U}(par, cs)
+    cs = fill(f, dom.n.elts)
+    Fun{D,T,U}(dom, cs)
 end
 
-function fidentity(::Type{U}, par::Par{1,T})::Fun{1,T,U} where
+function fidentity(::Type{U}, dom::Domain{1,T})::Fun{1,T,U} where
         {T<:Number, U<:Number}
-    if staggered(par)[1]
-        dx = (par.xmax[1] - par.xmin[1]) / par.n[1]
-        cs = LinRange(U(par.xmin[1] + dx[1]/2), U(par.xmax[1] - dx[1]/2),
-                      par.n[1])
+    if dom.staggered[1]
+        dx = (dom.xmax[1] - dom.xmin[1]) / dom.n[1]
+        cs = LinRange(U(dom.xmin[1] + dx[1]/2), U(dom.xmax[1] - dx[1]/2),
+                      dom.n[1])
     else
-        cs = LinRange(U(par.xmin[1]), U(par.xmax[1]), par.n[1])
+        cs = LinRange(U(dom.xmin[1]), U(dom.xmax[1]), dom.n[1])
     end
-    Fun{1,T,U}(par, cs)
+    Fun{1,T,U}(dom, cs)
 end
 
 
@@ -343,51 +279,51 @@ function (fun::Fun{D,T,U})(x::Vec{D,T})::U where {D, T<:Number, U<:Number}
     f = U(0)
     for ic in CartesianIndices(size(fun.coeffs))
         i = Vec(ic.I) .- 1
-        f += fun.coeffs[ic] * basis(fun.par, i, x)
+        f += fun.coeffs[ic] * basis(fun.dom, i, x)
     end
     f
 end
 
 # Create a discretized function by projecting onto the basis functions
 export approximate
-function approximate(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
+function approximate(fun, ::Type{U}, dom::Domain{D,T})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    if all(!staggered(par))
-        approximate_vc(fun, U, par)
-    elseif all(staggered(par))
-        approximate_cc(fun, U, par)
+    if all(!dom.staggered)
+        approximate_vc(fun, U, dom)
+    elseif all(dom.staggered)
+        approximate_cc(fun, U, dom)
     else
         @assert false
     end
 end
 
-function approximate_vc(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
+function approximate_vc(fun, ::Type{U}, dom::Domain{D,T})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    @assert all(!staggered(par))
+    @assert all(!dom.staggered)
 
     str = Vec{D,Int}(ntuple(dir ->
-                            dir==1 ? 1 : prod(par.n[d] for d in 1:dir-1), D))
-    len = prod(par.n)
+                            dir==1 ? 1 : prod(dom.n[d] for d in 1:dir-1), D))
+    len = prod(dom.n)
     idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
     function active(i::Vec{D,Int})::Bool
         mask === nothing && return true
         mask.mat[idx(i), idx(i)] != 0
     end
 
-    fs = Array{U,D}(undef, par.n.elts)
+    fs = Array{U,D}(undef, dom.n.elts)
     for ic in CartesianIndices(size(fs))
         i = Vec(ic.I) .- 1
         f = U(0)
         function kernel(x0::NTuple{D})::U
             x = Vec{D,T}(x0)
-            U(fun(x)) * U(basis(par, i, x))
+            U(fun(x)) * U(basis(dom, i, x))
         end
         x0 = Vec{D,T}(ntuple(d -> linear(
-            0, par.xmin[d], par.n[d]-1, par.xmax[d],
+            0, dom.xmin[d], dom.n[d]-1, dom.xmax[d],
             max(0, i[d]-1)), D))
         x1 = Vec{D,T}(ntuple(d -> linear(
-            0, par.xmin[d], par.n[d]-1, par.xmax[d],
-            min(par.n[d]-1, i[d]+1)), D))
+            0, dom.xmin[d], dom.n[d]-1, dom.xmax[d],
+            min(dom.n[d]-1, i[d]+1)), D))
         n = Vec{D,Int}(ntuple(d -> 8, D))
         f = quad(kernel, U, x0.elts, x1.elts, n.elts)
         fs[ic] = f
@@ -395,12 +331,12 @@ function approximate_vc(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
 
     Ws = ntuple(D) do d
         # We know the overlaps of the support of the basis functions
-        dv = [dot_basis(par, d, i, i) for i in 0:par.n[d]-1]
-        ev = [dot_basis(par, d, i, i+1) for i in 0:par.n[d]-2]
+        dv = [dot_basis(dom, d, i, i) for i in 0:dom.n[d]-1]
+        ev = [dot_basis(dom, d, i, i+1) for i in 0:dom.n[d]-2]
         SymTridiagonal(dv, ev)
     end
 
-    n = par.n
+    n = dom.n
     cs = fs
     if D == 1
         cs[:] = Ws[1] \ cs[:]
@@ -437,23 +373,23 @@ function approximate_vc(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
     else
         @assert false
     end
-    return Fun{D,T,U}(par, cs)
+    return Fun{D,T,U}(dom, cs)
 end
 
-function approximate_cc(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
+function approximate_cc(fun, ::Type{U}, dom::Domain{D,T})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    @assert all(staggered(par))
+    @assert all(dom.staggered)
 
     str = Vec{D,Int}(ntuple(dir ->
-                            dir==1 ? 1 : prod(par.n[d] for d in 1:dir-1), D))
-    len = prod(par.n)
+                            dir==1 ? 1 : prod(dom.n[d] for d in 1:dir-1), D))
+    len = prod(dom.n)
     idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
     function active(i::Vec{D,Int})::Bool
         mask === nothing && return true
         mask.mat[idx(i), idx(i)] != 0
     end
 
-    fs = Array{U,D}(undef, par.n.elts)
+    fs = Array{U,D}(undef, dom.n.elts)
     for ic in CartesianIndices(size(fs))
         i = Vec(ic.I) .- 1
         f = U(0)
@@ -462,40 +398,40 @@ function approximate_cc(fun, ::Type{U}, par::Par{D,T})::Fun{D,T,U} where
             U(fun(x))
         end
         x0 = Vec{D,T}(ntuple(d -> linear(
-            T(0), par.xmin[d], T(par.n[d]), par.xmax[d], T(i[d])), D))
+            T(0), dom.xmin[d], T(dom.n[d]), dom.xmax[d], T(i[d])), D))
         x1 = Vec{D,T}(ntuple(d -> linear(
-            T(-1), par.xmin[d], T(par.n[d]-1), par.xmax[d], T(i[d])), D))
+            T(-1), dom.xmin[d], T(dom.n[d]-1), dom.xmax[d], T(i[d])), D))
         n = Vec{D,Int}(ntuple(d -> 8, D))
         f = quad(kernel, U, x0.elts, x1.elts, n.elts)
         fs[ic] = f
     end
 
-    return Fun{D,T,U}(par, fs)
+    return Fun{D,T,U}(dom, fs)
 end
 
 
 
 # Approximate a delta function
 export approximate_delta
-function approximate_delta(::Type{U}, par::Par{D,T},
+function approximate_delta(::Type{U}, dom::Domain{D,T},
                            x::Vec{D,T})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    @assert !any(staggered(par)) # TODO
+    @assert !any(dom.staggered) # TODO
 
-    fs = Array{U,D}(undef, par.n.elts)
+    fs = Array{U,D}(undef, dom.n.elts)
     for ic in CartesianIndices(size(fs))
         i = Vec(ic.I) .- 1
-        fs[ic] = U(basis(par, i, x))
+        fs[ic] = U(basis(dom, i, x))
     end
 
     Ws = ntuple(D) do d
         # We know the overlaps of the support of the basis functions
-        dv = [dot_basis(par, d, i, i) for i in 0:par.n[d]-1]
-        ev = [dot_basis(par, d, i, i+1) for i in 0:par.n[d]-2]
+        dv = [dot_basis(dom, d, i, i) for i in 0:dom.n[d]-1]
+        ev = [dot_basis(dom, d, i, i+1) for i in 0:dom.n[d]-2]
         SymTridiagonal(dv, ev)
     end
 
-    n = par.n
+    n = dom.n
     cs = fs
     if D == 1
         cs[:] = Ws[1] \ cs[:]
@@ -532,7 +468,7 @@ function approximate_delta(::Type{U}, par::Par{D,T},
     else
         @assert false
     end
-    Fun{D,T,U}(par, cs)
+    Fun{D,T,U}(dom, cs)
 end
 
 
@@ -542,17 +478,17 @@ end
 # Derivatives
 
 # Derivative of basis functions   dϕ^i/dϕ^j
-function deriv_basis(par::Par{D,T}, d::Int, i::Int, j::Int)::T where
+function deriv_basis(dom::Domain{D,T}, d::Int, i::Int, j::Int)::T where
         {D, T<:Number}
-    @assert !any(staggered(par)) # TODO
-    dx = (fun.par.xmax[d] - fun.par.xmin[d]) / (fun.par.n[d] - 1)
+    @assert !any(dom.staggered) # TODO
+    dx = (fun.dom.xmax[d] - fun.dom.xmin[d]) / (fun.dom.n[d] - 1)
     if i == 0
         if j == i
             return -1/dx
         elseif j == i+1
             return 1/dx
         end
-    elseif i < par.n[d]
+    elseif i < dom.n[d]
         if j == i-1
             return -T(1)/2/dx
         elseif j == i+1
@@ -571,13 +507,13 @@ end
 
 
 export deriv
-function deriv(par::Par{D,T}, d::Int)::Tridiagonal{T} where {D, T<:Number}
-    @assert !any(staggered(par)) # TODO
+function deriv(dom::Domain{D,T}, d::Int)::Tridiagonal{T} where {D, T<:Number}
+    @assert !any(dom.staggered) # TODO
     # We know the overlaps of the support of the basis functions
-    n = par.n[d] - 1
-    dlv = [deriv_basis(par, d, i, i-1) for i in 1:n]
-    dv = [deriv_basis(par, d, i, i) for i in 0:n]
-    duv = [deriv_basis(par, d, i, i+1) for i in 0:n-1]
+    n = dom.n[d] - 1
+    dlv = [deriv_basis(dom, d, i, i-1) for i in 1:n]
+    dv = [deriv_basis(dom, d, i, i) for i in 0:n]
+    duv = [deriv_basis(dom, d, i, i+1) for i in 0:n-1]
     Tridiagonal(dlv, dv, duv)
 end
 
@@ -586,8 +522,8 @@ end
 function deriv(fun::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
     @assert 1 <= dir <= D
-    @assert !any(staggered(fun.par)) # TODO
-    dx = (fun.par.xmax[dir] - fun.par.xmin[dir]) / (fun.par.n[dir] - 1)
+    @assert !any(fun.dom.staggered) # TODO
+    dx = (fun.dom.xmax[dir] - fun.dom.xmin[dir]) / (fun.dom.n[dir] - 1)
     cs = fun.coeffs
     dcs = similar(cs)
     n = size(dcs, dir)
@@ -611,15 +547,15 @@ function deriv(fun::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where
         end
     end
 
-    Fun{D,T,U}(fun.par, dcs)
+    Fun{D,T,U}(fun.dom, dcs)
 end
 
 export deriv2
 function deriv2(fun::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
     @assert 1 <= dir <= D
-    @assert !any(staggered(fun.par)) # TODO
-    dx2 = ((fun.par.xmax[dir] - fun.par.xmin[dir]) / (fun.par.n[dir] - 1)) ^ 2
+    @assert !any(fun.dom.staggered) # TODO
+    dx2 = ((fun.dom.xmax[dir] - fun.dom.xmin[dir]) / (fun.dom.n[dir] - 1)) ^ 2
     cs = fun.coeffs
     dcs = similar(cs)
     n = size(dcs, dir)
@@ -642,7 +578,7 @@ function deriv2(fun::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where
         end
     end
 
-    Fun{D,T,U}(fun.par, dcs)
+    Fun{D,T,U}(fun.dom, dcs)
 end
 
 function deriv2(fun::Fun{D,T,U}, dir1::Int, dir2::Int)::Fun{D,T,U} where
@@ -664,7 +600,7 @@ end
 
 export Op
 struct Op{D,T,U} <: AbstractArray{U, 2}
-    par::Par{D,T}
+    dom::Domain{D,T}
     mat::SparseMatrixCSC{U,Int}
 end
 
@@ -709,66 +645,66 @@ end
 
 # Op is a vector space
 
-function Base.zeros(::Type{Op{D,T,U}}, par::Par{D,T})::Op{D,T,U} where
+function Base.zeros(::Type{Op{D,T,U}}, dom::Domain{D,T})::Op{D,T,U} where
         {D, T, U<:Number}
-    len = prod(par.n)
+    len = prod(dom.n)
     mat = spzeros(U, len, len)
-    Op{D,T,U}(par, mat)
+    Op{D,T,U}(dom, mat)
 end
 convert
 
 function Base.:+(A::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U<:Number}
-    Op{D,T,U}(A.par, +A.mat)
+    Op{D,T,U}(A.dom, +A.mat)
 end
 function Base.:-(A::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U<:Number}
-    Op{D,T,U}(A.par, -A.mat)
+    Op{D,T,U}(A.dom, -A.mat)
 end
 
 function Base.:+(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
-    @assert A.par == B.par
-    Op{D,T,U}(A.par, A.mat + B.mat)
+    @assert A.dom == B.dom
+    Op{D,T,U}(A.dom, A.mat + B.mat)
 end
 function Base.:-(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
-    @assert A.par == B.par
-    Op{D,T,U}(A.par, A.mat - B.mat)
+    @assert A.dom == B.dom
+    Op{D,T,U}(A.dom, A.mat - B.mat)
 end
 
 function Base.:*(a::Number, A::Op{D,T,U})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
-    Op{D,T,U}(A.par, U(a) * A.mat)
+    Op{D,T,U}(A.dom, U(a) * A.mat)
 end
 function Base.:*(A::Op{D,T,U}, a::Number)::Op{D,T,U} where
         {D, T<:Number, U<:Number}
-    Op{D,T,U}(A.par, A.mat * U(a))
+    Op{D,T,U}(A.dom, A.mat * U(a))
 end
 function Base.:\(a::Number, A::Op{D,T,U})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
-    Op{D,T,U}(A.par, U(a) \ A.mat)
+    Op{D,T,U}(A.dom, U(a) \ A.mat)
 end
 function Base.:/(A::Op{D,T,U}, a::Number)::Op{D,T,U} where
         {D, T<:Number, U<:Number}
-    Op{D,T,U}(A.par, A.mat / U(a))
+    Op{D,T,U}(A.dom, A.mat / U(a))
 end
 
 
 
 function Base.:*(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
-    @assert A.par == B.par
-    Op{D,T,U}(A.par, A.mat * B.mat)
+    @assert A.dom == B.dom
+    Op{D,T,U}(A.dom, A.mat * B.mat)
 end
 
 
 
-function Base.zero(::Type{Op{D,T,U}}, par::Par{D,T})::Op{D,T,U} where
+function Base.zero(::Type{Op{D,T,U}}, dom::Domain{D,T})::Op{D,T,U} where
         {D, T, U<:Number}
-    zeros(Op{D,T,U}, par)
+    zeros(Op{D,T,U}, dom)
 end
-function Base.one(::Type{Op{D,T,U}}, par::Par{D,T})::Op{D,T,U} where
+function Base.one(::Type{Op{D,T,U}}, dom::Domain{D,T})::Op{D,T,U} where
         {D, T, U<:Number}
-    n = par.n
+    n = dom.n
 
     str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
     len = prod(n)
@@ -782,37 +718,37 @@ function Base.one(::Type{Op{D,T,U}}, par::Par{D,T})::Op{D,T,U} where
         push!(J, idx(j))
         push!(V, v)
     end
-    for ic in CartesianIndices(par.n.elts)
+    for ic in CartesianIndices(dom.n.elts)
         i = Vec(ic.I) .- 1
         ins!(i, i, U(1))
     end
     mat = sparse(I, J, V, len, len)
-    Op{D,T,U}(par, mat)
+    Op{D,T,U}(dom, mat)
 end
 
 function Base.:*(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where
         {D, T, U<:Number}
-    par = rhs.par
-    @assert op.par == par
+    dom = rhs.dom
+    @assert op.dom == dom
 
-    res = reshape(op.mat * reshape(rhs.coeffs, :), par.n.elts)
-    Fun{D,T,U}(par, res)
+    res = reshape(op.mat * reshape(rhs.coeffs, :), dom.n.elts)
+    Fun{D,T,U}(dom, res)
 end
 
 # function Base.:*(lhs::Fun{D,T,U}, op::Op{D,T,U})::Fun{D,T,U} where
 #         {D, T, U<:Number}
-#     par = rhs.par
-#     @assert op.par == par
+#     dom = rhs.dom
+#     @assert op.dom == dom
 # 
 #     TODO: bra and ket
-#     res = reshape(reshape(lhs.coeffs, :) * op.mat, par.n.elts)
-#     Fun{D,T,U}(par, res)
+#     res = reshape(reshape(lhs.coeffs, :) * op.mat, dom.n.elts)
+#     Fun{D,T,U}(dom, res)
 # end
 
 function Base.:\(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where
         {D, T, U<:Number}
-    par = rhs.par
-    @assert op.par == par
+    dom = rhs.dom
+    @assert op.dom == dom
 
     M = op.mat
     if T <: Union{Float32, Float64}
@@ -821,21 +757,21 @@ function Base.:\(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where
         @info "Converting sparse to full matrix..."
         M = Matrix(M)
     end
-    sol = reshape(M \ reshape(rhs.coeffs, :), par.n.elts)
-    Fun{D,T,U}(par, sol)
+    sol = reshape(M \ reshape(rhs.coeffs, :), dom.n.elts)
+    Fun{D,T,U}(dom, sol)
 end
 
 # function Base.:\(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where
 #         {D, T, U<:Number}
-#     par = rhs.par
-#     @assert op.par == par
+#     dom = rhs.dom
+#     @assert op.dom == dom
 # 
-#     len = prod(par.n)
+#     len = prod(dom.n)
 # 
-#     bnd = boundary(U, par)
+#     bnd = boundary(U, dom)
 #     proj = I(len) - bnd.mat
-#     sol = reshape(op.mat \ (proj * reshape(rhs.coeffs, :)), par.n.elts)
-#     Fun{D,T,U}(par, sol)
+#     sol = reshape(op.mat \ (proj * reshape(rhs.coeffs, :)), dom.n.elts)
+#     Fun{D,T,U}(dom, sol)
 # end
 
 
@@ -847,22 +783,22 @@ export mix_op_bc
 function mix_op_bc(bnd::Op{D,T,U},
                    iop::Op{D,T,U}, bop::Op{D,T,U})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
-    par = bnd.par
-    @assert iop.par == par
-    @assert bop.par == par
+    dom = bnd.dom
+    @assert iop.dom == dom
+    @assert bop.dom == dom
 
-    id = one(Op{D,T,U}, par)
+    id = one(Op{D,T,U}, dom)
     int = id - bnd
     int * iop + bnd * bop
 end
 function mix_op_bc(bnd::Op{D,T,U},
                    rhs::Fun{D,T,U}, bvals::Fun{D,T,U})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    par = bnd.par
-    @assert rhs.par == par
-    @assert bvals.par == par
+    dom = bnd.dom
+    @assert rhs.dom == dom
+    @assert bvals.dom == dom
 
-    id = one(Op{D,T,U}, par)
+    id = one(Op{D,T,U}, dom)
     int = id - bnd
     int * rhs + bnd * bvals
 end
@@ -870,8 +806,8 @@ end
 
 
 export boundary
-function boundary(::Type{U}, par::Par{D,T})::Op{D,T,U} where {D, T, U<:Number}
-    n = par.n
+function boundary(::Type{U}, dom::Domain{D,T})::Op{D,T,U} where {D, T, U<:Number}
+    n = dom.n
 
     str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
     len = prod(n)
@@ -885,14 +821,14 @@ function boundary(::Type{U}, par::Par{D,T})::Op{D,T,U} where {D, T, U<:Number}
         push!(J, idx(j))
         push!(V, v)
     end
-    for ic in CartesianIndices(par.n.elts)
+    for ic in CartesianIndices(dom.n.elts)
         i = Vec(ic.I) .- 1
         if any(i .== 0) || any(i .== n .- 1)
             ins!(i, i, U(1))
         end
     end
     mat = sparse(I, J, V, len, len)
-    Op{D,T,U}(par, mat)
+    Op{D,T,U}(dom, mat)
 end
 
 export dirichlet
@@ -900,11 +836,11 @@ export dirichlet
 const dirichlet = boundary
 
 export laplace
-function laplace(::Type{U}, par::Par{D,T})::Op{D,T,U} where
+function laplace(::Type{U}, dom::Domain{D,T})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
-    @assert !any(staggered(par)) # TODO
-    n = par.n
-    dx2 = Vec(ntuple(d -> ((par.xmax[d] - par.xmin[d]) / (n[d] - 1)) ^ 2, D))
+    @assert !any(dom.staggered) # TODO
+    n = dom.n
+    dx2 = Vec(ntuple(d -> ((dom.xmax[d] - dom.xmin[d]) / (n[d] - 1)) ^ 2, D))
 
     str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
     len = prod(n)
@@ -920,7 +856,7 @@ function laplace(::Type{U}, par::Par{D,T})::Op{D,T,U} where
         push!(J, idx(j))
         push!(V, v)
     end
-    for ic in CartesianIndices(par.n.elts)
+    for ic in CartesianIndices(dom.n.elts)
         i = Vec(ic.I) .- 1
         for dir in 1:D
             di = Vec(ntuple(d -> d==dir ? 1 : 0, D))
@@ -937,16 +873,16 @@ function laplace(::Type{U}, par::Par{D,T})::Op{D,T,U} where
         end
     end
     mat = sparse(I, J, V, len, len)
-    Op{D,T,U}(par, mat)
+    Op{D,T,U}(dom, mat)
 end
 
 
 
 export boundaryIV
-function boundaryIV(::Type{U}, par::Par{D,T})::Op{D,T,U} where
+function boundaryIV(::Type{U}, dom::Domain{D,T})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
-    @assert !any(staggered(par)) # TODO
-    n = par.n
+    @assert !any(dom.staggered) # TODO
+    n = dom.n
 
     str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
     len = prod(n)
@@ -960,7 +896,7 @@ function boundaryIV(::Type{U}, par::Par{D,T})::Op{D,T,U} where
         push!(J, idx(j))
         push!(V, v)
     end
-    for ic in CartesianIndices(par.n.elts)
+    for ic in CartesianIndices(dom.n.elts)
         i = Vec(ic.I) .- 1
         isbnd = false
         for d in 1:D
@@ -975,7 +911,7 @@ function boundaryIV(::Type{U}, par::Par{D,T})::Op{D,T,U} where
         end
     end
     mat = sparse(I, J, V, len, len)
-    Op{D,T,U}(par, mat)
+    Op{D,T,U}(dom, mat)
 end
 
 export dirichletIV
@@ -983,11 +919,11 @@ export dirichletIV
 const dirichletIV = boundaryIV
 
 export dAlembert
-function dAlembert(::Type{U}, par::Par{D,T})::Op{D,T,U} where
+function dAlembert(::Type{U}, dom::Domain{D,T})::Op{D,T,U} where
         {D, T<:Number, U<:Number}
-    @assert !any(staggered(par)) # TODO
-    n = par.n
-    dx2 = Vec(ntuple(d -> ((par.xmax[d] - par.xmin[d]) / (n[d] - 1)) ^ 2, D))
+    @assert !any(dom.staggered) # TODO
+    n = dom.n
+    dx2 = Vec(ntuple(d -> ((dom.xmax[d] - dom.xmin[d]) / (n[d] - 1)) ^ 2, D))
 
     str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
     len = prod(n)
@@ -1003,7 +939,7 @@ function dAlembert(::Type{U}, par::Par{D,T})::Op{D,T,U} where
         push!(J, idx(j))
         push!(V, v)
     end
-    for ic in CartesianIndices(par.n.elts)
+    for ic in CartesianIndices(dom.n.elts)
         i = Vec(ic.I) .- 1
         for dir in 1:D
             s = bitsign(dir == D)
@@ -1031,19 +967,19 @@ function dAlembert(::Type{U}, par::Par{D,T})::Op{D,T,U} where
         end
     end
     mat = sparse(I, J, V, len, len)
-    Op{D,T,U}(par, mat)
+    Op{D,T,U}(dom, mat)
 end
 
 export solve_dAlembert_Dirichlet
 function solve_dAlembert_Dirichlet(pot::Fun{D,T,U},
                                    bvals::Fun{D,T,U})::Fun{D,T,U} where
         {D, T<:Number, U<:Number}
-    par = pot.par
-    @assert bvals.par == par
-    @assert !any(staggered(par)) # TODO
+    dom = pot.dom
+    @assert bvals.dom == dom
+    @assert !any(dom.staggered) # TODO
 
-    n = par.n
-    dx2 = Vec(ntuple(d -> ((par.xmax[d] - par.xmin[d]) / (n[d] - 1)) ^ 2, D))
+    n = dom.n
+    dx2 = Vec(ntuple(d -> ((dom.xmax[d] - dom.xmin[d]) / (n[d] - 1)) ^ 2, D))
 
     # TODO: use linear Cartesian index, calculate di
 
@@ -1074,7 +1010,7 @@ function solve_dAlembert_Dirichlet(pot::Fun{D,T,U},
         @assert false
     end
 
-    Fun{D,T,U}(par, sol)
+    Fun{D,T,U}(dom, sol)
 end
 
 
@@ -1086,18 +1022,18 @@ end
 # Derivative of a 0-form
 function deriv0(u0::Fun{D,T,U})::NTuple{D,Fun{D,T,U}} where {D,T,U}
     if D == 2
-        par0 = u0.par
-        s0 = staggered(par0)
-        n0 = par0.n
+        dom0 = u0.dom
+        s0 = dom0.staggered
+        n0 = dom0.n
         di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
-        dx = ntuple(d -> (par0.xmax[d] - par0.xmin[d]) / (n0[d] - 1), D)
+        dx = ntuple(d -> (dom0.xmax[d] - dom0.xmin[d]) / (n0[d] - 1), D)
         @assert s0 == Vec((false, false))
         s1x = Vec((true, false))
         s1t = Vec((false, true))
         n1x = Vec((n0[1]-s1x[1], n0[2]-s1x[2]))
         n1t = Vec((n0[1]-s1t[1], n0[2]-s1t[2]))
-        par1x = Par{D, T, Val{s1x}}(n1x, par0.xmin, par0.xmax)
-        par1t = Par{D, T, Val{s1t}}(n1t, par0.xmin, par0.xmax)
+        dom1x = Domain{D, T}(s1x, dom0.metric, n1x, dom0.xmin, dom0.xmax)
+        dom1t = Domain{D, T}(s1t, dom0.metric, n1t, dom0.xmin, dom0.xmax)
         cs0 = u0.coeffs
         dcs1x = Array{U}(undef, n1x.elts)
         for i in CartesianIndices(size(dcs1x))
@@ -1107,7 +1043,7 @@ function deriv0(u0::Fun{D,T,U})::NTuple{D,Fun{D,T,U}} where {D,T,U}
         for i in CartesianIndices(size(dcs1t))
             dcs1t[i] = (cs0[i + di[2]] - cs0[i]) / dx[2]
         end
-        return (Fun{D,T,U}(par1x, dcs1x), Fun{D,T,U}(par1t, dcs1t))
+        return (Fun{D,T,U}(dom1x, dcs1x), Fun{D,T,U}(dom1t, dcs1t))
     else
         @assert false
     end
@@ -1117,14 +1053,14 @@ end
 function star1(u1::NTuple{D, Fun{D,T,U}})::NTuple{D, Fun{D,T,U}} where {D,T,U}
     if D == 2
         u1x, u1t = u1
-        par1x = u1x.par
-        par1t = u1t.par
-        s1x = staggered(par1x)
-        s1t = staggered(par1t)
+        dom1x = u1x.dom
+        dom1t = u1t.dom
+        s1x = dom1x.staggered
+        s1t = dom1t.staggered
         @assert s1x == Vec((true, false))
         @assert s1t == Vec((false, true))
-        n1x = par1x.n
-        n1t = par1t.n
+        n1x = dom1x.n
+        n1t = dom1t.n
         n = Vec((n1x[1] + s1x[1], n1x[2] + s1x[2]))
         di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
         @assert n1x == Vec((n[1] - s1x[1], n[2] - s1x[2]))
@@ -1159,7 +1095,7 @@ function star1(u1::NTuple{D, Fun{D,T,U}})::NTuple{D, Fun{D,T,U}} where {D,T,U}
             end
             scs1t[i] = + s / c
         end
-        return (Fun{D,T,U}(par1x, scs1x), Fun{D,T,U}(par1t, scs1t))
+        return (Fun{D,T,U}(dom1x, scs1x), Fun{D,T,U}(dom1t, scs1t))
    else
         @assert false
     end
@@ -1171,20 +1107,20 @@ function wedge11(u1::NTuple{D, Fun{D,T,U}},
     if D == 2
         u1x, u1t = u1
         v1x, v1t = v1
-        @assert staggered(u1x.par) == Vec((true, false))
-        @assert staggered(u1t.par) == Vec((false, true))
-        @assert staggered(v1x.par) == Vec((true, false))
-        @assert staggered(v1t.par) == Vec((false, true))
-        n = Vec((u1x.par.n[1] + staggered(u1x.par)[1],
-                 u1x.par.n[2] + staggered(u1x.par)[2]))
-        @assert u1x.par.n == Vec((n[1] - staggered(u1x.par)[1],
-                                  n[2] - staggered(u1x.par)[2]))
-        @assert u1t.par.n == Vec((n[1] - staggered(u1t.par)[1],
-                                  n[2] - staggered(u1t.par)[2]))
-        @assert v1x.par.n == Vec((n[1] - staggered(v1x.par)[1],
-                                  n[2] - staggered(v1x.par)[2]))
-        @assert v1t.par.n == Vec((n[1] - staggered(v1t.par)[1],
-                                  n[2] - staggered(v1t.par)[2]))
+        @assert u1x.dom.staggered == Vec((true, false))
+        @assert u1t.dom.staggered == Vec((false, true))
+        @assert v1x.dom.staggered == Vec((true, false))
+        @assert v1t.dom.staggered == Vec((false, true))
+        n = Vec((u1x.dom.n[1] + u1x.dom.staggered[1],
+                 u1x.dom.n[2] + u1x.dom.staggered[2]))
+        @assert u1x.dom.n == Vec((n[1] - u1x.dom.staggered[1],
+                                  n[2] - u1x.dom.staggered[2]))
+        @assert u1t.dom.n == Vec((n[1] - u1t.dom.staggered[1],
+                                  n[2] - u1t.dom.staggered[2]))
+        @assert v1x.dom.n == Vec((n[1] - v1x.dom.staggered[1],
+                                  n[2] - v1x.dom.staggered[2]))
+        @assert v1t.dom.n == Vec((n[1] - v1t.dom.staggered[1],
+                                  n[2] - v1t.dom.staggered[2]))
         di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
         ucs1x = u1x.coeffs
         ucs1t = u1t.coeffs
@@ -1192,7 +1128,7 @@ function wedge11(u1::NTuple{D, Fun{D,T,U}},
         vcs1t = u1t.coeffs
         s2 = Vec((true, true))
         n2 = Vec((n[1] - s2[1], n[2] - s2[2]))
-        par2 = Par{D,T,Val{s2}}(n2, u1x.par.xmin, u1x.par.xmax)
+        dom2 = Domain{D,T}(s2, u1x.dom.metric, n2, u1x.dom.xmin, u1x.dom.xmax)
         wcs2 = Array{U}(undef, n2.elts)
         for i in CartesianIndices(size(wcs2))
             wcs2[i] = (+ (+ ucs1t[i] * vcs1x[i]
@@ -1204,7 +1140,7 @@ function wedge11(u1::NTuple{D, Fun{D,T,U}},
                           + ucs1x[i+di[2]] * vcs1t[i+di[1]]
                           + ucs1x[i] * vcs1t[i+di[1]])) / 8
         end
-        return Fun{D,T,U}(par2, wcs2)
+        return Fun{D,T,U}(dom2, wcs2)
     else
         @assert false
     end
@@ -1218,7 +1154,7 @@ end
 
 export scalarwave_energy
 function scalarwave_energy(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T<:Number}
-    @assert all(!staggered(phi.par))
+    @assert all(!phi.dom.staggered)
 
     dphi = deriv0(phi)
     sdphi = star1(dphi)
@@ -1228,11 +1164,11 @@ function scalarwave_energy(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T<:Number}
 end
 
 function scalarwave_energy1(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T<:Number}
-    @assert all(!staggered(phi.par))
-    spar = makestaggered(phi.par)
+    @assert all(!phi.dom.staggered)
+    sdom = makestaggered(phi.dom)
 
-    n = spar.n
-    dx = Vec(ntuple(d -> (spar.xmax[d] - spar.xmin[d]) / n[d], D))
+    n = sdom.n
+    dx = Vec(ntuple(d -> (sdom.xmax[d] - sdom.xmin[d]) / n[d], D))
     di = ntuple(dir -> Vec(ntuple(d -> Int(d==dir), D)), D)
 
     eps = Array{T}(undef, n.elts)
@@ -1274,7 +1210,7 @@ function scalarwave_energy1(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T<:Number}
         @assert false
     end
 
-    Fun{D,T,T}(spar, eps)
+    Fun{D,T,T}(sdom, eps)
 end
 
 # Energy conservation:
@@ -1371,7 +1307,7 @@ end
 
 export Particle
 struct Particle{D,T}
-    par::Par{D,T}
+    dom::Domain{D,T}
     mass::T
     charge::T
     pos::Vec{D,T}
@@ -1382,14 +1318,14 @@ end
 
 export particle_density
 function particle_density(p::Particle{D,T})::Fun{D,T,T} where {D,T}
-    p.charge * approximate_delta(T, p.par, p.pos)
+    p.charge * approximate_delta(T, p.dom, p.pos)
 end
 
 export particle_acceleration
 function particle_acceleration(p::Particle{D,T},
                                pot::Fun{D,T,T})::Vec{D,T} where {D,T}
-    par = p.par
-    @assert pot.par == par
+    dom = p.dom
+    @assert pot.dom == dom
 
     rho = particle_density(p)
 

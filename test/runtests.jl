@@ -5,14 +5,14 @@ using Test
 
 
 
-const par3 = Par{3,Float64}(9)
-const spar3 = makestaggered(par3)
+const dom3 = Domain{3,Float64}(9)
+const sdom3 = makestaggered(dom3)
 
 @testset "Parameters" begin
-    @test all(!staggered(par3))
-    @test all(par3.n .== 9)
-    @test all(staggered(spar3))
-    @test all(spar3.n .== 8)
+    @test all(!dom3.staggered)
+    @test all(dom3.n .== 9)
+    @test all(sdom3.staggered)
+    @test all(sdom3.n .== 8)
 end
 
 
@@ -21,7 +21,7 @@ function sinpiD(x::Vec{D,T})::T where {D,T}
     prod(sinpi(x[d]) for d in 1:D)
 end
 
-const fsinpi = approximate(sinpiD, Float64, par3)
+const fsinpi = approximate(sinpiD, Float64, dom3)
 
 @testset "Approximation" begin
     function find_maxerr()
@@ -48,7 +48,7 @@ end
     end
     
     fsinpix1 = deriv(fsinpi, 1)
-    fsinpix2 = approximate(sinpiDx, Float64, par3)
+    fsinpix2 = approximate(sinpiDx, Float64, dom3)
     
     maxdiffx = norm(fsinpix1 - fsinpix2, Inf)
     @test 0.44 <= maxdiffx < 0.45
@@ -62,7 +62,7 @@ end
     end
     
     fsinpixx1 = deriv2(fsinpi, 1, 1)
-    fsinpixx2 = approximate(sinpiDxx, Float64, par3)
+    fsinpixx2 = approximate(sinpiDxx, Float64, dom3)
     
     maxdiffxx = norm(fsinpixx1 - fsinpixx2, Inf)
     @test 7.1 <= maxdiffxx < 7.2
@@ -72,7 +72,7 @@ end
     end
     
     fsinpixy1 = deriv2(fsinpi, 1, 2)
-    fsinpixy2 = approximate(sinpiDxy, Float64, par3)
+    fsinpixy2 = approximate(sinpiDxy, Float64, dom3)
     
     maxdiffxy = norm(fsinpixy1 - fsinpixy2, Inf)
     @test 2.6 <= maxdiffxy < 2.7
@@ -81,12 +81,12 @@ end
 
 
 @testset "Poisson equation" begin
-    lap = laplace(Float64, par3)
-    del = 2pi * approximate_delta(Float64, par3, Vec((0.0, 0.0, 0.0)))
-    dir = dirichlet(Float64, par3)
-    bvals = zeros(typeof(del), par3)
+    lap = laplace(Float64, dom3)
+    del = 2pi * approximate_delta(Float64, dom3, Vec((0.0, 0.0, 0.0)))
+    dir = dirichlet(Float64, dom3)
+    bvals = zeros(typeof(del), dom3)
 
-    bnd = boundary(Float64, par3)
+    bnd = boundary(Float64, dom3)
     op = mix_op_bc(bnd, lap, dir)
     rhs = mix_op_bc(bnd, del, bvals)
     pot = op \ rhs
@@ -107,8 +107,7 @@ end
     end
 end
 
-function epsD(spar::Par{D,T,Val{Staggered}}, x::Vec{D,T})::T where
-        {D,T,Staggered}
+function epsD(sdom::Domain{D,T}, x::Vec{D,T})::T where {D, T}
     w = sqrt(T(D-1))
     if D == 2
         phix = pi * cospi(x[1]) * sinpi(w * x[2])
@@ -127,15 +126,15 @@ function epsD(spar::Par{D,T,Val{Staggered}}, x::Vec{D,T})::T where
     eps
 end
 
-const par2 = Par{2,Float64}(9)
-const spar2 = makestaggered(par2)
+const dom2 = Domain{2,Float64}(9)
+const sdom2 = makestaggered(dom2)
 
 @testset "Energy density of scalar wave" begin
-    phi = approximate(waveD, Float64, par2)
+    phi = approximate(waveD, Float64, dom2)
     eps = scalarwave_energy(phi)
 
-    epsD1(x) = epsD(spar2, x)
-    eps0 = approximate(epsD1, Float64, spar2)
+    epsD1(x) = epsD(sdom2, x)
+    eps0 = approximate(epsD1, Float64, sdom2)
     err = eps - eps0
     maxerr = norm(err, Inf)
     @test 0.21 <= maxerr < 0.22
@@ -143,15 +142,15 @@ end
 
 
 
-const par4 = Par{4,Float64}(9)
-const spar4 = makestaggered(par4)
+const dom4 = Domain{4,Float64}(9, lorentzian=true)
+const sdom4 = makestaggered(dom4)
 
 #TODO @testset "Energy density of scalar wave" begin
-#TODO     phi = approximate(waveD, Float64, par4)
+#TODO     phi = approximate(waveD, Float64, dom4)
 #TODO     eps = scalarwave_energy(phi)
 #TODO 
-#TODO     epsD1(x) = epsD(spar4, x)
-#TODO     eps0 = approximate(epsD1, Float64, spar4)
+#TODO     epsD1(x) = epsD(sdom4, x)
+#TODO     eps0 = approximate(epsD1, Float64, sdom4)
 #TODO     err = eps - eps0
 #TODO     @show maxerr = norm(err, Inf)
 #TODO     @test 0.046 <= maxerr < 0.047
@@ -160,8 +159,8 @@ const spar4 = makestaggered(par4)
 
 
 @testset "Scalar wave equation" begin
-    pot = zeros(Fun{4,Float64,Float64}, par4)
-    bvals = approximate(waveD, Float64, par4)
+    pot = zeros(Fun{4,Float64,Float64}, dom4)
+    bvals = approximate(waveD, Float64, dom4)
     sol = solve_dAlembert_Dirichlet(pot, bvals)
 
     err = sol - bvals
@@ -170,24 +169,24 @@ const spar4 = makestaggered(par4)
 end
 
 @testset "Scalar wave equation with singular source" begin
-    @assert all(par4.n[d] == par3.n[d] for d in 1:3)
+    @assert all(dom4.n[d] == dom3.n[d] for d in 1:3)
 
-    lap3 = laplace(Float64, par3)
-    del3 = 2pi * approximate_delta(Float64, par3, Vec((0.0, 0.0, 0.0)))
-    dir3 = dirichlet(Float64, par3)
-    bvals3 = zeros(typeof(del3), par3)
+    lap3 = laplace(Float64, dom3)
+    del3 = 2pi * approximate_delta(Float64, dom3, Vec((0.0, 0.0, 0.0)))
+    dir3 = dirichlet(Float64, dom3)
+    bvals3 = zeros(typeof(del3), dom3)
 
-    bnd3 = boundary(Float64, par3)
+    bnd3 = boundary(Float64, dom3)
     op3 = mix_op_bc(bnd3, lap3, dir3)
     rhs3 = mix_op_bc(bnd3, del3, bvals3)
     pot3 = op3 \ rhs3
 
-    pot = zeros(Fun{4,Float64,Float64}, par4)
-    for i4 in 1:par4.n[4]
+    pot = zeros(Fun{4,Float64,Float64}, dom4)
+    for i4 in 1:dom4.n[4]
         pot.coeffs[:,:,:,i4] = del3.coeffs[:,:,:]
     end
-    bvals = zeros(Fun{4,Float64,Float64}, par4)
-    for i4 in 1:par4.n[4]
+    bvals = zeros(Fun{4,Float64,Float64}, dom4)
+    for i4 in 1:dom4.n[4]
         bvals.coeffs[:,:,:,i4] = pot3.coeffs[:,:,:]
     end
 
