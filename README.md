@@ -11,5 +11,8 @@
 ## Plotting with Gadfly
 
 ```Julia
+using Gadfly
 plot([x->del(Vec((x,0.0)))/1e3, x->4pi*pot(Vec((x,0.0))), x->max(-10, -1/abs(x))], -1, 1, color=["delta", "potential", "1/r"])
+plot((x,y)->pot(Vec((Double64(x),Double64(y)))), -1, 1, -1, 1)
+# Coord.cartesian(fixed=true)
 ```

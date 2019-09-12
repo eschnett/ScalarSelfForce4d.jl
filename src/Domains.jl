@@ -12,6 +12,7 @@ export Domain
 struct Domain{D, T}
     # VC = false, CC = true
     staggered::Vec{D,Bool}
+
     # +1 = spacelike, -1 = timelike
     metric::Vec{D,Int}
 
@@ -38,12 +39,18 @@ function (::Type{Domain{D,T}})(np::Int; lorentzian=false) where {D, T}
     Domain{D,T}(staggered, metric, n, xmin, xmax)
 end
 
+export makeunstaggered
+function makeunstaggered(dom::Domain{D,T})::Domain{D,T} where {D, T}
+    Domain{D,T}(Vec(ntuple(d->false, D)), dom.metric,
+                dom.n + dom.staggered, dom.xmin, dom.xmax)
+end
+
 export makestaggered
-function makestaggered(dom::Domain{D,T})::Domain{D,T} where {D, T}
-    @assert all(!dom.staggered)
-    sdom = Domain{D,T}(!dom.staggered, dom.metric,
-                       dom.n .- 1, dom.xmin, dom.xmax)
-    sdom
+function makestaggered(sdom::Domain{D,T},
+                       staggered::Vec{D,Bool})::Domain{D,T} where {D, T}
+    dom = makeunstaggered(sdom)
+    Domain{D,T}(staggered, dom.metric,
+                dom.n - staggered, dom.xmin, dom.xmax)
 end
 
 
@@ -60,6 +67,10 @@ function coord(dom::Domain{D,T}, d::Int, i::Number)::T where {D, T<:Number}
         linear(T(0), dom.xmin[d], T(dom.n[d]-1), dom.xmax[d], T(i))
     end
 end
+function coord(dom::Domain{D,T}, i::Vec{D,<:Number})::Vec{D,T} where
+        {D, T<:Number}
+    Vec(ntuple(d -> coord(dom, d, i[d]), D))
+end
 
 export coords
 function coords(dom::Domain{D,T}, d::Int)::Vector{T} where {D, T<:Number}
@@ -67,6 +78,14 @@ function coords(dom::Domain{D,T}, d::Int)::Vector{T} where {D, T<:Number}
 end
 function coords(dom::Domain{D,T})::NTuple{D, Vector{T}} where {D, T<:Number}
     ntuple(d -> coords(dom, d) for d in 1:D)
+end
+
+
+
+export spacing
+function spacing(dom::Domain{D,T})::Vec{D,T} where {D, T<:Number}
+    Vec(ntuple(d -> ((dom.xmax[d] - dom.xmin[d]) /
+                     (dom.n[d] - !dom.staggered[d])), D))
 end
 
 end

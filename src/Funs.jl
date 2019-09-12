@@ -24,10 +24,10 @@ end
 # Fun interacts with scalars
 
 # function Base.promote_rule(::Type{Fun{D,T,U}}, ::Type{U}) where
-#         {D, T<:Number, U<:Number}
+#         {D, T<:Number, U}
 #     Fun{D,T,U}
 # end
-# function Base.convert(::Type{Fun{D,T,U}}, x::U) where {D, T<:Number, U<:Number}
+# function Base.convert(::Type{Fun{D,T,U}}, x::U) where {D, T<:Number, U}
 #     Fun{D,T,U}(ntuple(d -> x, D))
 # end
 
@@ -63,66 +63,59 @@ end
 # Fun is a vector space
 
 function Base.zeros(::Type{Fun{D,T,U}}, dom::Domain{D,T})::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
+        {D, T<:Number, U}
     Fun{D,T,U}(dom, zeros(U, dom.n.elts))
 end
 
-function Base.:+(f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U<:Number}
+function Base.:+(f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U}
     Fun{D,T,U}(f.dom, +f.elts)
 end
-function Base.:-(f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U<:Number}
+function Base.:-(f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U}
     Fun{D,T,U}(f.dom, -f.elts)
 end
 
 function Base.:+(f::Fun{D,T,U}, g::Fun{D,T,U})::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
+        {D, T<:Number, U}
     @assert f.dom == g.dom
     Fun{D,T,U}(f.dom, f.coeffs + g.coeffs)
 end
 function Base.:-(f::Fun{D,T,U}, g::Fun{D,T,U})::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
+        {D, T<:Number, U}
     @assert f.dom == g.dom
     Fun{D,T,U}(f.dom, f.coeffs - g.coeffs)
 end
 
-function Base.:*(a::Number, f::Fun{D,T,U})::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
+function Base.:*(a::Number, f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U}
     Fun{D,T,U}(f.dom, U(a) * f.coeffs)
 end
-function Base.:*(f::Fun{D,T,U}, a::Number)::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
+function Base.:*(f::Fun{D,T,U}, a::Number)::Fun{D,T,U} where {D, T<:Number, U}
     Fun{D,T,U}(f.dom, f.coeffs * U(a))
 end
-function Base.:\(a::Number, f::Fun{D,T,U})::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
+function Base.:\(a::Number, f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U}
     Fun{D,T,U}(f.dom, U(a) \ f.coeffs)
 end
-function Base.:/(f::Fun{D,T,U}, a::Number)::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
+function Base.:/(f::Fun{D,T,U}, a::Number)::Fun{D,T,U} where {D, T<:Number, U}
     Fun{D,T,U}(f.dom, f.coeffs / U(a))
 end
 
-# function Base.:.+(f::Fun{D,T,U}, c::U)::Fun{D,T,U} where
-#         {D, T<:Number, U<:Number}
+# function Base.:.+(f::Fun{D,T,U}, c::U)::Fun{D,T,U} where {D, T<:Number, U}
 #     Fun{D,T,U}(f.dom, f.coeffs .+ c)
 # end
-# function Base.:.-(f::Fun{D,T,U}, c::U)::Fun{D,T,U} where
-#         {D, T<:Number, U<:Number}
+# function Base.:.-(f::Fun{D,T,U}, c::U)::Fun{D,T,U} where {D, T<:Number, U}
 #     Fun{D,T,U}(f.dom, f.coeffs .- c)
 # end
 
-# function Base.:*(f::Fun{D,T,U}, g::Fun{D,T,U})::U where
-#         {D, T<:Number, U<:Number}
+# function Base.:*(f::Fun{D,T,U}, g::Fun{D,T,U})::U where {D, T<:Number, U}
 # TODO: bra and ket
 # end
 
-function Base.max(f::Fun{D,T,U})::T where {D, T<:Number, U<:Number}
+function Base.max(f::Fun{D,T,U})::T where {D, T<:Number, U}
     maximum(f.coeffs)
 end
-function Base.min(f::Fun{D,T,U})::T where {D, T<:Number, U<:Number}
+function Base.min(f::Fun{D,T,U})::T where {D, T<:Number, U}
     minimum(f.coeffs)
 end
-function Base.sum(f::Fun{D,T,U})::T where {D, T<:Number, U<:Number}
+function Base.sum(f::Fun{D,T,U})::T where {D, T<:Number, U}
     Ws = ntuple(D) do d
         ws = [weight(dom, d, i) for i in 0:dom.n[d]-1]
         Diagonal(ws)
@@ -152,8 +145,7 @@ function Base.sum(f::Fun{D,T,U})::T where {D, T<:Number, U<:Number}
     end
 end
 
-function LinearAlgebra.norm(f::Fun{D,T,U}, p::Real=2) where
-        {D, T<:Number, U<:Number}
+function LinearAlgebra.norm(f::Fun{D,T,U}, p::Real=2) where {D, T<:Number, U}
     if p == Inf
         maximum(abs.(f.coeffs))
     else
@@ -167,8 +159,17 @@ end
 
 # TODO: composition
 
-function fidentity(::Type{U}, dom::Domain{1,T})::Fun{1,T,U} where
-        {T<:Number, U<:Number}
+function fidentity(dom::Domain{1,T})::Fun{1,T,T} where {T<:Number}
+    if dom.staggered[1]
+        dx = (dom.xmax[1] - dom.xmin[1]) / dom.n[1]
+        cs = LinRange(dom.xmin[1] + dx[1]/2, dom.xmax[1] - dx[1]/2, dom.n[1])
+    else
+        cs = LinRange(dom.xmin[1], dom.xmax[1], dom.n[1])
+    end
+    Fun{1,T,T}(dom, cs)
+end
+
+function fidentity(::Type{U}, dom::Domain{1,T})::Fun{1,T,U} where {T<:Number, U}
     if dom.staggered[1]
         dx = (dom.xmax[1] - dom.xmin[1]) / dom.n[1]
         cs = LinRange(U(dom.xmin[1] + dx[1]/2), U(dom.xmax[1] - dx[1]/2),
@@ -179,8 +180,17 @@ function fidentity(::Type{U}, dom::Domain{1,T})::Fun{1,T,U} where
     Fun{1,T,U}(dom, cs)
 end
 
-function fconst(dom::Domain{D,T}, f::U)::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
+# function fidentity(dom::Domain{D,T})::Fun{1,T,Vec{D,T}} where {D, T<:Number}
+#     if dom.staggered[1]
+#         dx = (dom.xmax[1] - dom.xmin[1]) / dom.n[1]
+#         cs = LinRange(dom.xmin[1] + dx[1]/2, dom.xmax[1] - dx[1]/2, dom.n[1])
+#     else
+#         cs = LinRange(dom.xmin[1], dom.xmax[1], dom.n[1])
+#     end
+#     Fun{1,T,T}(dom, cs)
+# end
+
+function fconst(dom::Domain{D,T}, f::U)::Fun{D,T,U} where {D, T<:Number, U}
     cs = fill(f, dom.n.elts)
     Fun{D,T,U}(dom, cs)
 end
@@ -188,40 +198,42 @@ end
 
 
 # Evaluate a function
-function (fun::Fun{D,T,U})(x::Vec{D,T})::U where {D, T<:Number, U<:Number}
+function (fun::Fun{D,T,U})(x::Vec{D,T})::U where {D, T<:Number, U}
+    # f = U(0)
+    # for ic in CartesianIndices(size(fun.coeffs))
+    #     i = Vec(ic.I) .- 1
+    #     f += U(basis(fun.dom, i, x) * fun.coeffs[ic])
+    # end
+    # f
+
+    dom = fun.dom
+    num_regions = 2 .- convert(Vec{D,Int}, dom.staggered)
+    q = Vec{D,T}(ntuple(d -> linear(dom.xmin[d], T(0),
+                                    dom.xmax[d], T(dom.n[d]+dom.staggered[d]-1),
+                                    x[d]), D))
+    # using round instead of floor to avoid bias
+    i = Vec{D,Int}(ntuple(d -> max(0, min(dom.n[d] - num_regions[d],
+                                          round(Int, q[d] - T(1)/2))), D))
+
     f = U(0)
-    for ic in CartesianIndices(size(fun.coeffs))
-        i = Vec(ic.I) .- 1
-        f += fun.coeffs[ic] * basis(fun.dom, i, x)
+    for rc in CartesianIndices(num_regions.elts)
+        r = Vec(rc.I) .- 1
+        j = i + r
+        jc = CartesianIndex(j.elts .+ 1)
+        f += U(basis1(dom, j, x) * fun.coeffs[jc])
     end
     f
 end
 
 # Create a discretized function by projecting onto the basis functions
 export approximate
-function approximate(fun, ::Type{U}, dom::Domain{D,T})::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
-    if all(!dom.staggered)
-        approximate_vc(fun, U, dom)
-    elseif all(dom.staggered)
-        approximate_cc(fun, U, dom)
-    else
-        @assert false
-    end
-end
+function approximate(fun, dom::Domain{D,T})::Fun{D,T} where {D, T<:Number}
+    U = typeof(fun(dom.xmin))
 
-function approximate_vc(fun, ::Type{U}, dom::Domain{D,T})::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
-    @assert all(!dom.staggered)
-
-    str = Vec{D,Int}(ntuple(dir ->
-                            dir==1 ? 1 : prod(dom.n[d] for d in 1:dir-1), D))
-    len = prod(dom.n)
-    idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
-    function active(i::Vec{D,Int})::Bool
-        mask === nothing && return true
-        mask.mat[idx(i), idx(i)] != 0
-    end
+    # To ensure smooth kernels, VC direction are integrated in 2
+    # steps, CC regions in 1 step
+    num_regions = 2 .- convert(Vec{D,Int}, dom.staggered)
+    offset = (T(1)/2) * convert(Vec{D,T}, dom.staggered)
 
     fs = Array{U,D}(undef, dom.n.elts)
     for ic in CartesianIndices(size(fs))
@@ -229,25 +241,22 @@ function approximate_vc(fun, ::Type{U}, dom::Domain{D,T})::Fun{D,T,U} where
         f = U(0)
         function kernel(x0::NTuple{D})::U
             x = Vec{D,T}(x0)
-            U(fun(x)) * U(basis(dom, i, x))
+            fun(x) * U(basis(dom, i, x))
         end
-        x0 = Vec{D,T}(ntuple(d -> linear(
-            0, dom.xmin[d], dom.n[d]-1, dom.xmax[d],
-            max(0, i[d]-1)), D))
-        x1 = Vec{D,T}(ntuple(d -> linear(
-            0, dom.xmin[d], dom.n[d]-1, dom.xmax[d],
-            min(dom.n[d]-1, i[d]+1)), D))
-        n = Vec{D,Int}(ntuple(d -> 8, D))
-        f = quad(kernel, U, x0.elts, x1.elts, n.elts)
+        for rc in CartesianIndices(num_regions.elts)
+            r = Vec(rc.I) .- 1
+            j = i - r
+            if all(dom.staggered .| ((j .>= 0) .& (j .< dom.n .- 1)))
+                x0 = coord(dom, j - offset)
+                x1 = coord(dom, j - offset .+ 1)
+                n = convert(Vec{D,Int}, 8)
+                f += quad(kernel, U, x0.elts, x1.elts, n.elts)
+            end
+        end
         fs[ic] = f
     end
 
-    Ws = ntuple(D) do d
-        # We know the overlaps of the support of the basis functions
-        dv = [dot_basis(dom, d, i, i) for i in 0:dom.n[d]-1]
-        ev = [dot_basis(dom, d, i, i+1) for i in 0:dom.n[d]-2]
-        SymTridiagonal(dv, ev)
-    end
+    Ws = weights(dom)
 
     n = dom.n
     cs = fs
@@ -289,60 +298,21 @@ function approximate_vc(fun, ::Type{U}, dom::Domain{D,T})::Fun{D,T,U} where
     return Fun{D,T,U}(dom, cs)
 end
 
-function approximate_cc(fun, ::Type{U}, dom::Domain{D,T})::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
-    @assert all(dom.staggered)
-
-    str = Vec{D,Int}(ntuple(dir ->
-                            dir==1 ? 1 : prod(dom.n[d] for d in 1:dir-1), D))
-    len = prod(dom.n)
-    idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
-    function active(i::Vec{D,Int})::Bool
-        mask === nothing && return true
-        mask.mat[idx(i), idx(i)] != 0
-    end
-
-    fs = Array{U,D}(undef, dom.n.elts)
-    for ic in CartesianIndices(size(fs))
-        i = Vec(ic.I) .- 1
-        f = U(0)
-        function kernel(x0::NTuple{D})::U
-            x = Vec{D,T}(x0)
-            U(fun(x))
-        end
-        x0 = Vec{D,T}(ntuple(d -> linear(
-            T(0), dom.xmin[d], T(dom.n[d]), dom.xmax[d], T(i[d])), D))
-        x1 = Vec{D,T}(ntuple(d -> linear(
-            T(-1), dom.xmin[d], T(dom.n[d]-1), dom.xmax[d], T(i[d])), D))
-        n = Vec{D,Int}(ntuple(d -> 8, D))
-        f = quad(kernel, U, x0.elts, x1.elts, n.elts)
-        fs[ic] = f
-    end
-
-    return Fun{D,T,U}(dom, fs)
-end
-
 
 
 # Approximate a delta function
 export approximate_delta
-function approximate_delta(::Type{U}, dom::Domain{D,T},
-                           x::Vec{D,T})::Fun{D,T,U} where
-        {D, T<:Number, U<:Number}
+function approximate_delta(dom::Domain{D,T}, x::Vec{D,T})::Fun{D,T,T} where
+        {D, T<:Number}
     @assert !any(dom.staggered) # TODO
 
-    fs = Array{U,D}(undef, dom.n.elts)
+    fs = Array{T,D}(undef, dom.n.elts)
     for ic in CartesianIndices(size(fs))
         i = Vec(ic.I) .- 1
-        fs[ic] = U(basis(dom, i, x))
+        fs[ic] = basis(dom, i, x)
     end
 
-    Ws = ntuple(D) do d
-        # We know the overlaps of the support of the basis functions
-        dv = [dot_basis(dom, d, i, i) for i in 0:dom.n[d]-1]
-        ev = [dot_basis(dom, d, i, i+1) for i in 0:dom.n[d]-2]
-        SymTridiagonal(dv, ev)
-    end
+    Ws = weights(dom)
 
     n = dom.n
     cs = fs
@@ -381,7 +351,53 @@ function approximate_delta(::Type{U}, dom::Domain{D,T},
     else
         @assert false
     end
-    Fun{D,T,U}(dom, cs)
+    Fun{D,T,T}(dom, cs)
+end
+
+
+
+export solve_dAlembert_Dirichlet
+function solve_dAlembert_Dirichlet(pot::Fun{D,T,U},
+                                   bvals::Fun{D,T,U})::Fun{D,T,U} where
+        {D, T<:Number, U}
+    dom = pot.dom
+    @assert bvals.dom == dom
+    @assert !any(dom.staggered)
+
+    n = dom.n
+    dx = spacing(dom)
+    dx2 = dx .* dx
+
+    # TODO: use linear Cartesian index, calculate di
+
+    sol = similar(pot.coeffs)
+    if D == 4
+        # Initial and boundary conditions
+        sol[1,:,:,:] = bvals.coeffs[1,:,:,:]
+        sol[end,:,:,:] = bvals.coeffs[end,:,:,:]
+        sol[:,1,:,:] = bvals.coeffs[:,1,:,:]
+        sol[:,end,:,:] = bvals.coeffs[:,end,:,:]
+        sol[:,:,1,:] = bvals.coeffs[:,:,1,:]
+        sol[:,:,end,:] = bvals.coeffs[:,:,end,:]
+        sol[:,:,:,1] = bvals.coeffs[:,:,:,1]
+        sol[:,:,:,2] = bvals.coeffs[:,:,:,2]
+        # d'Alembert operator
+        for i4=2:n[4]-1
+            for i3=2:n[3]-1, i2=2:n[2]-1, i1=2:n[1]-1
+                sol[i1,i2,i3,i4+1] =
+                    (- sol[i1,i2,i3,i4-1] + 2*sol[i1,i2,i3,i4]
+                     + dx2[4] * (
+                         + (sol[i1-1,i2,i3,i4] - 2*sol[i1,i2,i3,i4] + sol[i1+1,i2,i3,i4]) / dx2[1]
+                         + (sol[i1,i2-1,i3,i4] - 2*sol[i1,i2,i3,i4] + sol[i1,i2+1,i3,i4]) / dx2[2]
+                         + (sol[i1,i2,i3-1,i4] - 2*sol[i1,i2,i3,i4] + sol[i1,i2,i3+1,i4]) / dx2[3]
+                         - pot.coeffs[i1,i2,i3,i4]))
+            end
+        end
+    else
+        @assert false
+    end
+
+    Fun{D,T,U}(dom, sol)
 end
 
 end

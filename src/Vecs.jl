@@ -24,8 +24,16 @@ end
 function Base.promote_rule(::Type{Vec{D,T}}, ::Type{T}) where {D, T<:Number}
     Vec{D,T}
 end
-function Base.convert(::Type{Vec{D,T}}, x::T) where {D, T<:Number}
+function Base.convert(::Type{Vec{D,T}}, x::T) where {D, T}
     Vec{D,T}(ntuple(d -> x, D))
+end
+
+function Base.promote_rule(::Type{Vec{D,T}}, ::Type{Vec{D,U}}) where {D, T, U}
+    R = promote_type(T, U)
+    Vec{D,R}
+end
+function Base.convert(::Type{Vec{D,R}}, x::Vec{D,T}) where {D, T, R}
+    Vec{D,R}(ntuple(d -> R(x[d]), D))
 end
 
 
@@ -66,37 +74,62 @@ end
 #     Vec{D,T}(ntuple(d -> T(1), D))
 # end
 
-function Base.:+(x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
+export unitvec
+function unitvec(::Val{D}, dir::Int) where {D}
+    @assert 1 <= dir <= D
+    Vec{D,Bool}(ntuple(d -> d == dir, D))
+end
+export unitvecs
+function unitvecs(::Val{D})::NTuple{D, Vec{D, Bool}} where {D}
+    ntuple(dir -> unitvec(Val(D), dir), D)
+end
+
+
+
+function Base.:+(x::Vec{D,T})::Vec{D,T} where {D, T}
     Vec{D,T}(.+(x.elts))
 end
-function Base.:-(x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
+function Base.:-(x::Vec{D,T})::Vec{D,T} where {D, T}
     Vec{D,T}(.-(x.elts))
 end
-function Base.inv(x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
+function Base.inv(x::Vec{D,T})::Vec{D,T} where {D, T}
     Vec{D,T}(inv.(x.elts))
 end
 
-function Base.:+(x::Vec{D,T}, y::Vec{D,T})::Vec{D,T} where {D, T<:Number}
+function Base.:+(x::Vec{D,T}, y::Vec{D,T})::Vec{D,T} where {D, T}
     Vec{D,T}(x.elts .+ y.elts)
 end
-function Base.:-(x::Vec{D,T}, y::Vec{D,T})::Vec{D,T} where {D, T<:Number}
+function Base.:-(x::Vec{D,T}, y::Vec{D,T})::Vec{D,T} where {D, T}
     Vec{D,T}(x.elts .- y.elts)
 end
+function Base.:+(xs::Vec, ys::Vec)::Vec
+    +(promote(xs, ys)...)
+end
+function Base.:-(xs::Vec, ys::Vec)::Vec
+    -(promote(xs, ys)...)
+end
 
-function Base.:*(a::Number, x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
+function Base.:*(a::Number, x::Vec{D,T})::Vec{D,T} where {D, T}
     Vec{D,T}(T(a) .* x.elts)
 end
-function Base.:*(x::Vec{D,T}, a::Number)::Vec{D,T} where {D, T<:Number}
+function Base.:*(x::Vec{D,T}, a::Number)::Vec{D,T} where {D, T}
     Vec{D,T}(x.elts .* T(a))
 end
-function Base.:\(a::Number, x::Vec{D,T})::Vec{D,T} where {D, T<:Number}
+function Base.:\(a::Number, x::Vec{D,T})::Vec{D,T} where {D, T}
     Vec{D,T}(T(a) .\ x.elts)
 end
-function Base.:/(x::Vec{D,T}, a::Number)::Vec{D,T} where {D, T<:Number}
+function Base.:/(x::Vec{D,T}, a::Number)::Vec{D,T} where {D, T}
     Vec{D,T}(x.elts ./ T(a))
 end
 
-const ArithOp = Union{typeof(+), typeof(-), typeof(*), typeof(/), typeof(\)}
+const UnaryOp = Union{typeof(ceil), typeof(floor), typeof(round)}
+function Base.broadcasted(op::UnaryOp, x::Vec{D,T})::Vec{D,T} where
+        {D, T<:Number}
+    Vec{D,T}(ntuple(d -> op(x.elts[d]), D))
+end
+
+const ArithOp = Union{typeof(+), typeof(-), typeof(*), typeof(/), typeof(\),
+                      typeof(min), typeof(max)}
 function Base.broadcasted(op::ArithOp,
                           x::Vec{D,T}, y::Vec{D,T})::Vec{D,T} where
         {D, T<:Number}
@@ -152,10 +185,10 @@ end
 function Base.any(x::Vec{D,Bool})::Bool where {D}
     any(x.elts)
 end
-function Base.max(x::Vec{D,T})::T where {D, T<:Number}
+function Base.maximum(x::Vec{D,T})::T where {D, T<:Number}
     max(x.elts)
 end
-function Base.min(x::Vec{D,T})::T where {D, T<:Number}
+function Base.minimum(x::Vec{D,T})::T where {D, T<:Number}
     min(x.elts)
 end
 function Base.prod(x::Vec{D,T})::T where {D, T<:Number}
