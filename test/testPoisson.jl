@@ -1,17 +1,11 @@
 const dom4 = Domain{4,Float64}(9, lorentzian=true)
 
-# @generated function waveD(x::Vec{D,T})::T where {D,T}
-#     fs = [:(sinpi(x[$d])) for d in 1:D-1]
-#     quote
-#         $(Expr(:meta, :inline))
-#         w = sqrt(T(3))
-#         *($(fs...), sinpi(w * x[D]))
-#     end
-# end
-
-function waveD(x::Vec{D,T})::T where {D,T}
-    k = ntuple(d -> d<D ? T(1) : sqrt(T(D-1)), D)
-    prod(sinpi(k[d] * x[d]) for d in 1:D)
+@generated function waveD(x::Vec{D,T})::T where {D,T}
+    quote
+        $(Expr(:meta, :inline))
+        k = tuple($([d<D ? :(T(1)) : :(sqrt(T(D-1))) for d in 1:D]...))
+        *($([:(sinpi(k[$d] * x[$d])) for d in 1:D]...))
+    end
 end
 
 
@@ -40,7 +34,7 @@ function testPoisson()
 
         err = sol - bvals
         maxerr = norm(err, Inf)
-        @test 0.036 <= maxerr < 0.037
+        @test 0.037 <= maxerr < 0.038
     end
 
     @testset "Scalar wave equation with singular source" begin

@@ -30,9 +30,11 @@ function basis(dom::Domain{D,T}, d::Int, i::Int, x::T)::T where {D, T<:Number}
         max(f0, min(fm, fp))
     end
 end
-function basis(dom::Domain{D,T}, i::Vec{D,Int}, x::Vec{D,T})::T where
+@generated function basis(dom::Domain{D,T}, i::Vec{D,Int}, x::Vec{D,T})::T where
         {D, T<:Number}
-    prod(basis(dom, d, i[d], x[d]) for d in 1:D)
+    quote
+        *($([:(basis(dom, $d, i[$d], x[$d])) for d in 1:D]...))
+    end
 end
 
 # Like basis, but the CC basis functions are continued to avoid

@@ -249,7 +249,8 @@ function approximate(fun, dom::Domain{D,T})::Fun{D,T} where {D, T<:Number}
             if all(dom.staggered .| ((j .>= 0) .& (j .< dom.n .- 1)))
                 x0 = coord(dom, j - offset)
                 x1 = coord(dom, j - offset .+ 1)
-                n = convert(Vec{D,Int}, 8)
+                # n = convert(Vec{D,Int}, 8)
+                n = convert(Vec{D,Int}, 4)
                 f += quad(kernel, U, x0.elts, x1.elts, n.elts)
             end
         end
@@ -368,7 +369,7 @@ function solve_dAlembert_Dirichlet(pot::Fun{D,T,U},
     dx = spacing(dom)
     dx2 = dx .* dx
 
-    # TODO: use linear Cartesian index, calculate di
+    di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D-1)), D-1)
 
     sol = similar(pot.coeffs)
     if D == 4
@@ -383,14 +384,14 @@ function solve_dAlembert_Dirichlet(pot::Fun{D,T,U},
         sol[:,:,:,2] = bvals.coeffs[:,:,:,2]
         # d'Alembert operator
         for i4=2:n[4]-1
-            for i3=2:n[3]-1, i2=2:n[2]-1, i1=2:n[1]-1
-                sol[i1,i2,i3,i4+1] =
-                    (- sol[i1,i2,i3,i4-1] + 2*sol[i1,i2,i3,i4]
+            for i123 in CartesianIndices(ntuple(d -> 2:n[d]-1, D-1))
+                sol[i123,i4+1] =
+                    (- sol[i123,i4-1] + 2*sol[i123,i4]
                      + dx2[4] * (
-                         + (sol[i1-1,i2,i3,i4] - 2*sol[i1,i2,i3,i4] + sol[i1+1,i2,i3,i4]) / dx2[1]
-                         + (sol[i1,i2-1,i3,i4] - 2*sol[i1,i2,i3,i4] + sol[i1,i2+1,i3,i4]) / dx2[2]
-                         + (sol[i1,i2,i3-1,i4] - 2*sol[i1,i2,i3,i4] + sol[i1,i2,i3+1,i4]) / dx2[3]
-                         - pot.coeffs[i1,i2,i3,i4]))
+                         + (sol[i123-di[1],i4] - 2*sol[i123,i4] + sol[i123+di[1],i4]) / dx2[1]
+                         + (sol[i123-di[2],i4] - 2*sol[i123,i4] + sol[i123+di[2],i4]) / dx2[3]
+                         + (sol[i123-di[3],i4] - 2*sol[i123,i4] + sol[i123+di[3],i4]) / dx2[3]
+                         - pot.coeffs[i123,i4]))
             end
         end
     else
