@@ -5,6 +5,7 @@ module Forms
 
 using SparseArrays
 
+using ..Defs
 using ..Domains
 using ..Funs
 using ..Ops
@@ -27,7 +28,7 @@ struct Form{D, R, T, U}
 
         count = 0
         for i in CartesianIndices(ntuple(d -> D, R))
-            !all(i[d] > i[d+1] for d in 1:R-1) && continue
+            !all(i[d+1] > i[d] for d in 1:R-1) && continue
             count += 1
             f = dict[Vec{R,Int}(i.I)]
             @assert all(f.dom.staggered[d] == (d in i.I) for d in 1:D)
@@ -57,8 +58,278 @@ end
 
 
 
+struct FOp{D, R, T}
+end
+
+
+
+function diff(f::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where {D, T<:Number, U}
+    @assert 1 <= dir <= D
+
+    dom = f.dom
+    @assert !dom.staggered[dir]
+    rdom = makestaggered(dom, dom.staggered | unitvec(Val(D), dir))
+    @assert rdom.staggered[dir]
+
+    di = CartesianIndex(ntuple(d -> d==dir, D))
+    dx = spacing(dom)[dir]
+
+    cs = f.coeffs
+    rcs = Array{U}(undef, rdom.n.elts)
+    for i in CartesianIndices(size(rcs))
+        rcs[i] = (cs[i+di] - cs[i]) / dx
+    end
+
+    Fun{D,T,U}(rdom, rcs)
+end
+
+function codiff(f::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where {D, T<:Number, U}
+    @assert 1 <= dir <= D
+
+    dom = f.dom
+    @assert dom.staggered[dir]
+    rdom = makestaggered(dom, dom.staggered & ~unitvec(Val(D), dir))
+    @assert !rdom.staggered[dir]
+
+    di = CartesianIndex(ntuple(d -> d==dir, D))
+    dx = spacing(dom)[dir]
+
+    cs = f.coeffs
+    rcs = Array{U}(undef, rdom.n.elts)
+    for i in CartesianIndices(size(rcs))
+        j = CartesianIndex(ntuple(d -> (d==dir
+                                        ? max(2, min(dom.n[d], i[d]))
+                                        : i[d]), D))
+        rcs[i] = (cs[j] - cs[j-di]) / dx
+    end
+
+    Fun{D,T,U}(rdom, rcs)
+end
+
+function avg(f::Fun{D,T,U}, dirs::Vec{D,Bool})::Fun{D,T,U} where
+        {D, T<:Number, U}
+    dom = f.dom
+    @assert !any(dom.staggered & dirs)
+    rdom = makestaggered(dom, dom.staggered | dirs)
+    @assert all(rdom.staggered & dirs == dirs)
+
+    # di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
+    # dx = spacing(dom)[dir]
+
+    cs = f.coeffs
+    rcs = Array{U}(undef, rdom.n.elts)
+    # jmin = CartesianIndex(ntuple(d -> 2, D))
+    # jmax = CartesianIndex(ntuple(d -> dom.n[d] - dirs[d], D))
+    for i in CartesianIndices(size(rcs))
+        s = U(0)
+        # c = U(0)
+        for di in CartesianIndices(ntuple(d -> 0:dirs[d], D))
+            s += cs[i + di]
+            # j = i + di
+            # if j >= jmin && j <= jmax
+            #     s += cs[j]
+            #     c += U(1)
+            # end
+        end
+        # rcs[i] = s / c
+        rcs[i] = s / (1 << sum(dirs.elts))
+    end
+
+    Fun{D,T,U}(rdom, rcs)
+end
+
+# avg ∘ coavg = id
+function coavg(f::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where {D, T<:Number, U}
+    @assert 1 <= dir <= D
+
+    dom = f.dom
+    @assert dom.staggered[dir]
+    rdom = makestaggered(dom, dom.staggered & ~unitvec(Val(D), dir))
+    @assert !rdom.staggered[dir]
+
+    di = CartesianIndex(ntuple(d -> d==dir, D))
+    # dx = spacing(dom)[dir]
+
+    perm = [dir, (1:dir-1)..., (dir+1:D)...]
+    pcs = permutedims(f.coeffs, perm)
+    prcs = Array{U}(undef, rdom.n.elts[perm])
+    for j in CartesianIndices(size(pcs)[2:end])
+        prcs[1,j] = 0
+        for i in 2:size(prcs,1)
+            prcs[i,j] = 2 * pcs[i-1,j] - prcs[i-1,j]
+        end
+        # This is a choice: Set highest mode (alternating sum) to zero
+        altavg =
+            sum(bitsign(i) * prcs[i,j] for i in 1:size(prcs,1)) / size(prcs,1)
+        for i in 1:size(prcs,1)
+            prcs[i,j] -= bitsign(i) * altavg
+        end
+    end
+    invperm = Array{Int}(undef, D)
+    invperm[perm] = [(1:D)...]
+    @assert perm[invperm] == [(1:D)...]
+    rcs = permutedims(prcs, invperm)
+
+    Fun{D,T,U}(rdom, rcs)
+end
+
+
+
+export star
+# star[k] ∘ star[n-k] = (-1)^(k (n-k))   [only for Euclidean manifolds?]
+function star(form::Form{D,R,T,U})::Form{D,D-R,T,U} where {D, R, T<:Number, U}
+    if R == 0
+        if D == 2
+            u0 = form[()]
+            r2xy = avg(u0, ~u0.dom.staggered)
+            return Form(Dict((1,2) => r2xy))
+        else
+            @assert false
+        end
+    elseif R == 1
+        if D == 2
+            u1x = form[(1,)]
+            u1y = form[(2,)]
+            r1x = - coavg(avg(u1y, ~u1y.dom.staggered), 2)
+            r1y = + coavg(avg(u1x, ~u1x.dom.staggered), 1)
+            return Form(Dict((1,) => r1x, (2,) => r1y))
+        else
+            @assert false
+        end
+    elseif R == 2
+        if D == 2
+            u2xy = form[(1,2)]
+            r0 = coavg(coavg(u2xy, 1), 2)
+            return Form(Dict(() => r0))
+        else
+            @assert false
+        end
+    else
+        @assert false
+    end
+end
+
+# TODO: REMOVE THIS
+function star1(form::Form{D,R,T,U})::Form{D,D-R,T,U} where {D, R, T<:Number, U}
+    di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
+    dom = makeunstaggered(first(form).second)
+    dx = spacing(dom)
+
+    if R == 0
+        if D == 2
+            u0 = form[()]
+            dom0 = u0.dom
+            dom2xy = makestaggered(dom0, Vec((true, true)))
+            cs0 = u0.coeffs
+            scs2xy = Array{U}(undef, dom2xy.n.elts)
+            for i in CartesianIndices(size(scs2xy))
+                s = (+ cs0[i] + cs0[i + di[1]]
+                     + cs0[i + di[2]] + cs0[i + di[1] + di[2]])
+                scs2xy[i] = 1/(dx[1]*dx[2]) * s / 4
+            end
+            return Form(Dict((1,2) => Fun{D,T,U}(dom2xy, scs2xy)))
+        else
+            @assert false
+        end
+    elseif R == 1
+        if D == 2
+            u1x = form[(1,)]
+            u1y = form[(2,)]
+            dom1x = u1x.dom
+            dom1y = u1y.dom
+            s1x = dom1x.staggered
+            s1y = dom1y.staggered
+            n1x = dom1x.n
+            n1y = dom1y.n
+            n = dom.n
+            cs1x = u1x.coeffs
+            cs1y = u1y.coeffs
+            scs1x = Array{U}(undef, n1x.elts)
+            for i in CartesianIndices(size(scs1x))
+                s = U(0)
+                c = 0
+                if i[2] > 1
+                    s += cs1y[i-di[2]] + cs1y[i-di[2]+di[1]]
+                    c += 2
+                end
+                if i[2] < n[2]
+                    s += cs1y[i] + cs1y[i+di[1]]
+                    c += 2
+                end
+                scs1x[i] = - dx[2]/dx[1] * s / c
+            end
+            scs1y = Array{U}(undef, n1y.elts) 
+            for i in CartesianIndices(size(scs1y))
+                s = U(0)
+                c = 0
+                if i[1] > 1
+                    s += cs1x[i-di[1]] + cs1x[i-di[1]+di[2]]
+                    c += 2
+                end
+                if i[1] < n[1]
+                    s += cs1x[i] + cs1x[i+di[2]]
+                    c += 2
+                end
+                scs1y[i] = + dx[1]/dx[2] * s / c
+            end
+            return Form(Dict((1,) => Fun{D,T,U}(dom1x, scs1x),
+                             (2,) => (Fun{D,T,U}(dom1y, scs1y))))
+        else
+            @assert false
+        end
+    elseif R == 2
+        if D == 2
+            u2xy = form[(1,2)]
+            dom2xy = u2xy.dom
+            dom0 = makeunstaggered(dom2xy)
+            n0 = dom0.n
+            cs2xy = u2xy.coeffs
+            scs0 = Array{U}(undef, n0.elts)
+            for i in CartesianIndices(size(scs0))
+                j = CartesianIndex(min.(dom2xy.n.elts, i.I))
+                scs0[i] = dx[1]*dx[2] * cs2xy[j]
+            end
+            return Form(Dict(() => Fun{D,T,U}(dom0, scs0)))
+        else
+            @assert false
+        end
+    else
+        @assert false
+    end
+end
+
+
+
 export deriv
+function deriv(dom::Domain{D,T})::Op{D,T,T} where {D, T<:Number}
+end
+
 function deriv(form::Form{D,R,T,U})::Form{D,R+1,T,U} where {D, R, T<:Number, U}
+    if R == 0
+        if D == 2
+            u0 = form[()]
+            r1x = diff(u0, 1)
+            r1y = diff(u0, 2)
+            return Form(Dict((1,) => r1x, (2,) => r1y))
+        else
+            @assert false
+        end
+    elseif R == 1
+        if D == 2
+            u1x = form[(1,)]
+            u1y = form[(2,)]
+            r2xy = - diff(u1x, 2) + diff(u1y,1)
+            return Form(Dict((1,2) => r2xy))
+        else
+            @assert false
+        end
+    else
+        @assert false
+    end
+end
+
+# TODO: REMOVE THIS
+function deriv1(form::Form{D,R,T,U})::Form{D,R+1,T,U} where {D, R, T<:Number, U}
     di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
     dx = spacing(form.dom)
 
@@ -100,6 +371,22 @@ function deriv(form::Form{D,R,T,U})::Form{D,R+1,T,U} where {D, R, T<:Number, U}
         else
             @assert false
         end
+    elseif R == 1
+        if D == 2
+            f1x = form[(1,)]
+            f1y = form[(2,)]
+            cs1x = f1x.coeffs
+            cs1y = f1y.coeffs
+            dom2xy = makestaggered(f1x.dom, Vec((true, true)))
+            dcs2xy = Array{U}(undef, dom2xy.n.elts)
+            for i in CartesianIndices(size(dcs2xy))
+                dcs2xy[i] = (+ (cs1y[i + di[1]] - cs1y[i]) / dx[1]
+                             - (cs1x[i + di[2]] - cs1x[i]) / dx[2])
+            end
+            return Form(Dict((1,2) => Fun(dom2xy, dcs2xy)))
+        else
+            @assert false
+        end
     else
         @assert false
     end
@@ -109,6 +396,24 @@ end
 
 export coderiv
 function coderiv(form::Form{D,R,T,U})::Form{D,R-1,T,U} where
+        {D, R, T<:Number, U}
+    # (star ∘ deriv ∘ star)(form)
+    if R == 1
+        if D == 2
+            u1x = form[(1,)]
+            u1y = form[(2,)]
+            r0 = codiff(u1x, 1) + codiff(u1y, 2)
+            return Form(Dict(() => r0))
+        else
+            @assert false
+        end
+    else
+        @assert false
+    end
+end
+
+# TODO: REMOVE THIS
+function coderiv1(form::Form{D,R,T,U})::Form{D,R-1,T,U} where
         {D, R, T<:Number, U}
     di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
     dx = spacing(form.dom)

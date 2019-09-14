@@ -25,9 +25,6 @@ function testFuns()
     @testset "Funs.Approximation" begin
         atol = 100 * eps(1.0)
     
-        dom3 = Domain{3,Float64}(9)
-        sdom3 = makestaggered(dom3, Vec((true, true, true)))
-    
         ac = approximate(x->1.0, dom3)
         maxerr = find_maxerr(x->1.0, ac)
         @test isapprox(maxerr, 0; atol=atol)

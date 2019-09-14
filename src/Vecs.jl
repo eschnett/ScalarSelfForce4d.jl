@@ -75,7 +75,7 @@ end
 # end
 
 export unitvec
-function unitvec(::Val{D}, dir::Int) where {D}
+function unitvec(::Val{D}, dir::Int)::Vec{D,Bool} where {D}
     @assert 1 <= dir <= D
     Vec{D,Bool}(ntuple(d -> d == dir, D))
 end
@@ -167,7 +167,7 @@ function Base.:&(x::Vec{D,Bool}, y::Vec{D,Bool})::Vec{D,Bool} where {D}
     Vec{D,Bool}(x.elts .& y.elts)
 end
 function Base.:|(x::Vec{D,Bool}, y::Vec{D,Bool})::Vec{D,Bool} where {D}
-    Vec{D,Bool}(x.elts .& y.elts)
+    Vec{D,Bool}(x.elts .| y.elts)
 end
 function Base.:!(x::Vec{D,Bool})::Vec{D,Bool} where {D}
     ~x

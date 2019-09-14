@@ -2,11 +2,14 @@ using ScalarSelfForce4d.Vecs
 
 
 
-function test_Vecs()
+function testVecs()
 
     @testset "Vecs" begin
     end
 
 end
 
-test_Vecs()
+testVecs()
+
+xs = [Vec{1,Int}((rand(-100:100),)) for i in 1:100]
+testVectorspace(zeros(Vec{1,Int}), xs, isequal)

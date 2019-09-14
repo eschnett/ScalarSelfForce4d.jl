@@ -10,14 +10,15 @@ using ..Vecs
 
 export Domain
 struct Domain{D, T}
-    # VC = false, CC = true
     staggered::Vec{D,Bool}
+    # openlb::Vec{D,Bool}
+    # openub::Vec{D,Bool}
 
     # +1 = spacelike, -1 = timelike
     metric::Vec{D,Int}
 
-    # Actual number of vertices or cells; for the same dx, n[VC] =
-    # n[CC] + 1
+    # The actual number of vertices or cells also depends on whether
+    # the lower or upper bounds are open or closed
     n::Vec{D,Int}
 
     # Domain boundary; vertices lie on the boundary, cell centres lie

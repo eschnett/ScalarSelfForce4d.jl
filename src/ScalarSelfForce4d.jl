@@ -159,58 +159,6 @@ function deriv0(u0::Fun{D,T,U})::NTuple{D,Fun{D,T,U}} where {D,T,U}
     end
 end
 
-# Hodge star of a 1-form
-function star1(u1::NTuple{D, Fun{D,T,U}})::NTuple{D, Fun{D,T,U}} where {D,T,U}
-    if D == 2
-        u1x, u1t = u1
-        dom1x = u1x.dom
-        dom1t = u1t.dom
-        s1x = dom1x.staggered
-        s1t = dom1t.staggered
-        @assert s1x == Vec((true, false))
-        @assert s1t == Vec((false, true))
-        n1x = dom1x.n
-        n1t = dom1t.n
-        n = Vec((n1x[1] + s1x[1], n1x[2] + s1x[2]))
-        di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
-        @assert n1x == Vec((n[1] - s1x[1], n[2] - s1x[2]))
-        @assert n1t == Vec((n[1] - s1t[1], n[2] - s1t[2]))
-        cs1x = u1x.coeffs
-        cs1t = u1t.coeffs
-        scs1x = Array{U}(undef, n1x.elts)
-        for i in CartesianIndices(size(scs1x))
-            s = U(0)
-            c = U(0)
-            if i[2] > 1
-                s += cs1t[i-di[2]] + cs1t[i-di[2]+di[1]]
-                c += 2
-            end
-            if i[2] < n[2]
-                s += cs1t[i] + cs1t[i+di[1]]
-                c += 2
-            end
-            scs1x[i] = - s / c
-        end
-        scs1t = Array{U}(undef, n1t.elts) 
-        for i in CartesianIndices(size(scs1t))
-            s = U(0)
-            c = U(0)
-            if i[1] > 1
-                s += cs1x[i-di[1]] + cs1x[i-di[1]+di[2]]
-                c += 2
-            end
-            if i[1] < n[1]
-                s += cs1x[i] + cs1x[i+di[2]]
-                c += 2
-            end
-            scs1t[i] = + s / c
-        end
-        return (Fun{D,T,U}(dom1x, scs1x), Fun{D,T,U}(dom1t, scs1t))
-   else
-        @assert false
-    end
-end
-
 # Wedge of two 1-forms
 function wedge11(u1::NTuple{D, Fun{D,T,U}},
                  v1::NTuple{D, Fun{D,T,U}})::Fun{D,T,U} where {D,T,U}

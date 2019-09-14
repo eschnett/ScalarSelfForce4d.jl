@@ -1,5 +1,8 @@
 using Test
 
+# Helpers
+include("testVectorspace.jl")
+
 # Unit tests
 include("testDefs.jl")
 include("testQuadrature.jl")

@@ -16,6 +16,7 @@ using ..Vecs
 export Fun
 struct Fun{D,T,U} <: DenseArray{T, D}
     dom::Domain{D,T}
+    # staggered::Vec{D,Bool}
     coeffs::Array{U,D}
 end
 
@@ -68,10 +69,10 @@ function Base.zeros(::Type{Fun{D,T,U}}, dom::Domain{D,T})::Fun{D,T,U} where
 end
 
 function Base.:+(f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U}
-    Fun{D,T,U}(f.dom, +f.elts)
+    Fun{D,T,U}(f.dom, +f.coeffs)
 end
 function Base.:-(f::Fun{D,T,U})::Fun{D,T,U} where {D, T<:Number, U}
-    Fun{D,T,U}(f.dom, -f.elts)
+    Fun{D,T,U}(f.dom, -f.coeffs)
 end
 
 function Base.:+(f::Fun{D,T,U}, g::Fun{D,T,U})::Fun{D,T,U} where
@@ -373,25 +374,30 @@ function solve_dAlembert_Dirichlet(pot::Fun{D,T,U},
 
     sol = similar(pot.coeffs)
     if D == 4
-        # Initial and boundary conditions
-        sol[1,:,:,:] = bvals.coeffs[1,:,:,:]
-        sol[end,:,:,:] = bvals.coeffs[end,:,:,:]
-        sol[:,1,:,:] = bvals.coeffs[:,1,:,:]
-        sol[:,end,:,:] = bvals.coeffs[:,end,:,:]
-        sol[:,:,1,:] = bvals.coeffs[:,:,1,:]
-        sol[:,:,end,:] = bvals.coeffs[:,:,end,:]
+        # Initial conditions
         sol[:,:,:,1] = bvals.coeffs[:,:,:,1]
         sol[:,:,:,2] = bvals.coeffs[:,:,:,2]
-        # d'Alembert operator
-        for i4=2:n[4]-1
-            for i123 in CartesianIndices(ntuple(d -> 2:n[d]-1, D-1))
-                sol[i123,i4+1] =
-                    (- sol[i123,i4-1] + 2*sol[i123,i4]
-                     + dx2[4] * (
-                         + (sol[i123-di[1],i4] - 2*sol[i123,i4] + sol[i123+di[1],i4]) / dx2[1]
-                         + (sol[i123-di[2],i4] - 2*sol[i123,i4] + sol[i123+di[2],i4]) / dx2[3]
-                         + (sol[i123-di[3],i4] - 2*sol[i123,i4] + sol[i123+di[3],i4]) / dx2[3]
-                         - pot.coeffs[i123,i4]))
+        for j=3:n[4]
+            # Boundary conditions
+            sol[1,:,:,j] = bvals.coeffs[1,:,:,j]
+            sol[end,:,:,j] = bvals.coeffs[end,:,:,j]
+            sol[:,1,:,j] = bvals.coeffs[:,1,:,j]
+            sol[:,end,:,j] = bvals.coeffs[:,end,:,j]
+            sol[:,:,1,j] = bvals.coeffs[:,:,1,j]
+            sol[:,:,end,j] = bvals.coeffs[:,:,end,j]
+            # Wave equation
+            for i in CartesianIndices(ntuple(d -> 2:n[d]-1, D-1))
+                lsol = (+ (+ sol[i-di[1],j-1]
+                           - 2*sol[i,j-1]
+                           + sol[i+di[1],j-1]) / dx2[1]
+                        + (+ sol[i-di[2],j-1]
+                           - 2*sol[i,j-1]
+                           + sol[i+di[2],j-1]) / dx2[3]
+                        + (+ sol[i-di[3],j-1]
+                           - 2*sol[i,j-1]
+                           + sol[i+di[3],j-1]) / dx2[3])
+                sol[i,j] = (- sol[i,j-2] + 2*sol[i,j-1]
+                            + dx2[4] * (lsol - pot.coeffs[i,j-1]))
             end
         end
     else
