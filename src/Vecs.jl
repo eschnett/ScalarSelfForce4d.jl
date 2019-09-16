@@ -67,6 +67,15 @@ end
 function Base.zeros(::Type{Vec{D,T}})::Vec{D,T} where {D, T<:Number}
     Vec{D,T}(ntuple(d -> T(0), D))
 end
+function Base.ones(::Type{Vec{D,T}})::Vec{D,T} where {D, T<:Number}
+    Vec{D,T}(ntuple(d -> T(1), D))
+end
+function Base.falses(::Type{Vec{D,Bool}})::Vec{D,Bool} where {D}
+    zeros(Vec{D,Bool})
+end
+function Base.trues(::Type{Vec{D,Bool}})::Vec{D,Bool} where {D}
+    ones(Vec{D,Bool})
+end
 # function Base.zero(::Type{Vec{D,T}})::Vec{D,T} where {D, T<:Number}
 #     Vec{D,T}(ntuple(d -> T(0), D))
 # end
@@ -102,17 +111,17 @@ end
 function Base.:-(x::Vec{D,T}, y::Vec{D,T})::Vec{D,T} where {D, T}
     Vec{D,T}(x.elts .- y.elts)
 end
-function Base.:+(xs::Vec, ys::Vec)::Vec
-    +(promote(xs, ys)...)
+function Base.:+(x::Vec, y::Vec)::Vec
+    +(promote(x, y)...)
 end
-function Base.:-(xs::Vec, ys::Vec)::Vec
-    -(promote(xs, ys)...)
+function Base.:-(x::Vec, y::Vec)::Vec
+    -(promote(x, y)...)
 end
 
-function Base.:*(a::Number, x::Vec{D,T})::Vec{D,T} where {D, T}
+function Base.:*(a::T, x::Vec{D,T})::Vec{D,T} where {D, T}
     Vec{D,T}(T(a) .* x.elts)
 end
-function Base.:*(x::Vec{D,T}, a::Number)::Vec{D,T} where {D, T}
+function Base.:*(x::Vec{D,T}, a::T)::Vec{D,T} where {D, T}
     Vec{D,T}(x.elts .* T(a))
 end
 function Base.:\(a::Number, x::Vec{D,T})::Vec{D,T} where {D, T}
@@ -169,9 +178,13 @@ end
 function Base.:|(x::Vec{D,Bool}, y::Vec{D,Bool})::Vec{D,Bool} where {D}
     Vec{D,Bool}(x.elts .| y.elts)
 end
-function Base.:!(x::Vec{D,Bool})::Vec{D,Bool} where {D}
-    ~x
+function Base.xor(x::Vec{D,Bool}, y::Vec{D,Bool})::Vec{D,Bool} where {D}
+    Vec{D,Bool}(xor.(x.elts, y.elts))
 end
+
+# function Base.:!(x::Vec{D,Bool})::Vec{D,Bool} where {D}
+#     ~x
+# end
 # function Base.:&&(x::Vec{D,Bool}, y::Vec{D,Bool})::Vec{D,Bool} where {D}
 #     x & y
 # end
@@ -179,11 +192,28 @@ end
 #     x | y
 # end
 
+const BoolOp = Union{typeof(:&), typeof(:|), typeof(xor)}
+function Base.broadcasted(op::BoolOp,
+                          x::Vec{D,Bool}, y::Vec{D,Bool})::Vec{D,Bool} where {D}
+    Vec{D,Bool}(ntuple(d -> op(x.elts[d], y.elts[d]), D))
+end
+function Base.broadcasted(op::BoolOp,
+                          x::Vec{D,Bool}, a::Bool)::Vec{D,Bool} where {D}
+    Vec{D,Bool}(ntuple(d -> op(x.elts[d], a), D))
+end
+function Base.broadcasted(op::BoolOp,
+                          a::Bool, x::Vec{D,Bool})::Vec{D,Bool} where {D}
+    Vec{D,Bool}(ntuple(d -> op(a, x.elts[d]), D))
+end
+
 function Base.all(x::Vec{D,Bool})::Bool where {D}
     all(x.elts)
 end
 function Base.any(x::Vec{D,Bool})::Bool where {D}
     any(x.elts)
+end
+function Base.count(x::Vec{D,Bool})::Int where {D}
+    count(x.elts)
 end
 function Base.maximum(x::Vec{D,T})::T where {D, T<:Number}
     max(x.elts)

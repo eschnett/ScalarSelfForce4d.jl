@@ -1,5 +1,5 @@
 function testVectorspace(z::T, xs::AbstractVector{T}, iseq) where {T}
-    @testset "Vectorspace.setup" begin
+    @testset "Vectorspace.setup $T" begin
         @test !isempty(xs)
         x = first(xs)
         @test iseq(x, x) === true
@@ -8,7 +8,7 @@ function testVectorspace(z::T, xs::AbstractVector{T}, iseq) where {T}
     ys = rand(xs, length(xs))
     zs = rand(xs, length(xs))
 
-    @testset "Vectorspace.add.types" begin
+    @testset "Vectorspace.add.types $T" begin
         @test z isa T
         for x in xs
             @test x isa T
@@ -19,19 +19,19 @@ function testVectorspace(z::T, xs::AbstractVector{T}, iseq) where {T}
         end
     end
 
-    @testset "Vectorspace.add.assoc" begin
+    @testset "Vectorspace.add.assoc $T" begin
         for (x,y,z) in zip(xs, ys, zs)
             @test iseq(x + (y + z), (x + y) + z)
         end
     end
 
-    @testset "Vectorspace.add.comm" begin
+    @testset "Vectorspace.add.comm $T" begin
         for (x,y) in zip(xs, ys)
             @test iseq(x + y, y + x)
         end
     end
 
-    @testset "Vectorspace.add.zero" begin
+    @testset "Vectorspace.add.zero $T" begin
         @test iseq(z, z)
         @test iseq(+z, z)
         @test iseq(z + z, z)
@@ -41,7 +41,7 @@ function testVectorspace(z::T, xs::AbstractVector{T}, iseq) where {T}
         end
     end
 
-    @testset "Vectorspace.add.inv" begin
+    @testset "Vectorspace.add.inv $T" begin
         @test iseq(-z, z)
         for x in xs
             @test iseq(-(-x), x)

@@ -10,16 +10,17 @@ using ..Vecs
 
 export Domain
 struct Domain{D, T}
+    dual::Bool
+
+    # Whether the respective direction holds vertices (false) or cells
+    # (true)
     staggered::Vec{D,Bool}
-    # openlb::Vec{D,Bool}
-    # openub::Vec{D,Bool}
 
-    # +1 = spacelike, -1 = timelike
-    metric::Vec{D,Int}
-
-    # The actual number of vertices or cells also depends on whether
-    # the lower or upper bounds are open or closed
+    # Actual number of vertices or cells
     n::Vec{D,Int}
+
+    # Metric: +1 = spacelike, -1 = timelike
+    metric::Vec{D,Int}
 
     # Domain boundary; vertices lie on the boundary, cell centres lie
     # dx/2 inwards
@@ -28,30 +29,48 @@ struct Domain{D, T}
 end
 
 function (::Type{Domain{D,T}})(np::Int; lorentzian=false) where {D, T}
+    staggered = falses(Vec{D,Bool})
+    n = Vec{D,Int}(ntuple(d -> np, D))
     if lorentzian
-        metric = Vec(ntuple(d -> d==D ? -1 : 1, D))
+        metric = Vec{D,Int}(ntuple(d -> d==D ? -1 : 1, D))
     else
-        metric = Vec(ntuple(d -> 1, D))
+        metric = Vec{D,Int}(ntuple(d -> 1, D))
     end
-    staggered = Vec(ntuple(d -> false, D))
-    n = Vec(ntuple(d -> np, D))
-    xmin = Vec{D,T}(ntuple(d -> metric[d]<0 ? 0 : -1, D))
+    xmin = Vec{D,T}(ntuple(d -> metric[d] < 0 ? 0 : -1, D))
     xmax = Vec{D,T}(ntuple(d -> 1, D))
-    Domain{D,T}(staggered, metric, n, xmin, xmax)
+    Domain{D,T}(false, staggered, n, metric, xmin, xmax)
+end
+
+export makeprimal
+function makeprimal(dom::Domain{D,T})::Domain{D,T} where {D, T}
+    Domain{D,T}(false, xor.(dom.dual, dom.staggered), dom.n,
+                dom.metric, dom.xmin, dom.xmax)
+end
+
+export makedual
+function makedual(dom::Domain{D,T}, dual::Bool)::Domain{D,T} where {D, T}
+    Domain{D,T}(dual, xor.(dual != dom.dual, dom.staggered), dom.n,
+                dom.metric, dom.xmin, dom.xmax)
 end
 
 export makeunstaggered
 function makeunstaggered(dom::Domain{D,T})::Domain{D,T} where {D, T}
-    Domain{D,T}(Vec(ntuple(d->false, D)), dom.metric,
-                dom.n + dom.staggered, dom.xmin, dom.xmax)
+    Domain{D,T}(dom.dual, falses(Vec{D,Bool}),
+                !dom.dual
+                ? dom.n + dom.staggered
+                : dom.n - dom.staggered,
+                dom.metric, dom.xmin, dom.xmax)
 end
 
 export makestaggered
 function makestaggered(sdom::Domain{D,T},
                        staggered::Vec{D,Bool})::Domain{D,T} where {D, T}
     dom = makeunstaggered(sdom)
-    Domain{D,T}(staggered, dom.metric,
-                dom.n - staggered, dom.xmin, dom.xmax)
+    Domain{D,T}(dom.dual, staggered,
+                !dom.dual
+                ? dom.n - staggered
+                : dom.n + staggered,
+                dom.metric, dom.xmin, dom.xmax)
 end
 
 
@@ -59,14 +78,10 @@ end
 # Coordinates of collocation points
 export coord
 function coord(dom::Domain{D,T}, d::Int, i::Number)::T where {D, T<:Number}
-    if dom.staggered[d]
-        j = T(i) + T(1)/2
-        @assert 0 <= j <= dom.n[d]
-        linear(T(0), dom.xmin[d], T(dom.n[d]), dom.xmax[d], j)
-    else
-        @assert 0 <= i <= dom.n[d] - 1
-        linear(T(0), dom.xmin[d], T(dom.n[d]-1), dom.xmax[d], T(i))
-    end
+    @assert !dom.dual
+    @assert 0 <= i <= dom.n[d] + dom.staggered[d] - 1
+    linear(T(0), dom.xmin[d],
+           T(dom.n[d] + dom.staggered[d] - 1), dom.xmax[d], T(i))
 end
 function coord(dom::Domain{D,T}, i::Vec{D,<:Number})::Vec{D,T} where
         {D, T<:Number}
@@ -84,9 +99,12 @@ end
 
 
 export spacing
+function spacing(dom::Domain{D,T}, d::Int)::T where {D, T<:Number}
+    nc = dom.n[d] + (dom.staggered[d] != dom.dual) - 1
+    (dom.xmax[d] - dom.xmin[d]) / nc
+end
 function spacing(dom::Domain{D,T})::Vec{D,T} where {D, T<:Number}
-    Vec(ntuple(d -> ((dom.xmax[d] - dom.xmin[d]) /
-                     (dom.n[d] - !dom.staggered[d])), D))
+    Vec{D,T}(ntuple(d -> spacing(dom, d), D))
 end
 
 end

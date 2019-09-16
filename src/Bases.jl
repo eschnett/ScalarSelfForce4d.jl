@@ -13,151 +13,164 @@ using ..Vecs
 
 # Basis functions
 export basis
-function basis(dom::Domain{D,T}, d::Int, i::Int, x::T)::T where {D, T<:Number}
-    @assert i>=0 && i<dom.n[d]
-    if dom.staggered[d]
-        x0 = coord(dom, d, T(i) - T(1)/2)
-        x1 = coord(dom, d, T(i) + T(1)/2)
-        y0 = i==0 ? T(1) : T(1)/2
-        y1 = i==dom.n[d]-1 ? T(1) : T(1)/2
-        characteristic(x0, y0, x1, y1, x)
-    else
-        fm = linear(dom.xmin[d], T(1 - i), dom.xmax[d], T(1 + dom.n[d] - 1 - i),
-                    x)
-        fp = linear(dom.xmin[d], T(1 + i), dom.xmax[d], T(1 - dom.n[d] + 1 + i),
-                    x)
-        f0 = T(0)
-        max(f0, min(fm, fp))
-    end
-end
-@generated function basis(dom::Domain{D,T}, i::Vec{D,Int}, x::Vec{D,T})::T where
+function basis(dom::Domain{D,T}, d::Int, i::Int, ix::Int, x::T)::T where
         {D, T<:Number}
-    quote
-        *($([:(basis(dom, $d, i[$d], x[$d])) for d in 1:D]...))
-    end
-end
-
-# Like basis, but the CC basis functions are continued to avoid
-# problems due to round-off
-export basis1
-function basis1(dom::Domain{D,T}, d::Int, i::Int, x::T)::T where {D, T<:Number}
-    @assert i>=0 && i<dom.n[d]
-    if dom.staggered[d]
-        T(1)
+    @assert !dom.dual
+    @assert !dom.staggered[d]
+    @assert i>=0 && i<=dom.n[d]-1
+    @assert ix>=0 && ix<=dom.n[d]-1
+    if ix == i - 1
+        x0 = coord(dom, d, i)
+        dx = spacing(dom, d)
+        1 - (x0 - x) / dx
+    elseif ix == i
+        x0 = coord(dom, d, i)
+        dx = spacing(dom, d)
+        1 - (x - x0) / dx
     else
-        fm = linear(dom.xmin[d], T(1 - i), dom.xmax[d], T(1 + dom.n[d] - 1 - i),
-                    x)
-        fp = linear(dom.xmin[d], T(1 + i), dom.xmax[d], T(1 - dom.n[d] + 1 + i),
-                    x)
-        f0 = T(0)
-        max(f0, min(fm, fp))
+        T(0)
     end
 end
-function basis1(dom::Domain{D,T}, i::Vec{D,Int}, x::Vec{D,T})::T where
+
+# Derivatives of basis functions
+export dbasis
+function dbasis(dom::Domain{D,T}, d::Int, i::Int, ix::Int, x::T)::T where
         {D, T<:Number}
-    prod(basis1(dom, d, i[d], x[d]) for d in 1:D)
+    @assert !dom.dual
+    @assert dom.staggered[d]
+    @assert i>=0 && i<=dom.n[d]-1
+    @assert ix>=0 && ix<=dom.n[d]-1
+    if ix == i - 1
+        dx = spacing(dom, d)
+        -2 / dx
+    elseif ix == i
+        dx = spacing(dom, d)
+        2 / dx
+    else
+        T(0)
+    end
 end
-
-
 
 # Dot product between basis functions
 export dot_basis
 function dot_basis(dom::Domain{D,T}, d::Int, i::Int, j::Int)::T where
         {D, T<:Number}
-    n = dom.n[d]
-    @assert i>=0 && i<n
-    @assert j>=0 && j<n
+    @assert !dom.dual
+    @assert !dom.staggered[d]
+    @assert i>=0 && i<dom.n[d]
+    @assert j>=0 && j<dom.n[d]
     dx = spacing(dom)[d]
-    if dom.staggered[d]
-        if (j == i)
-            return dx
+    if j == i-1
+        return dx/6
+    elseif j == i
+        if i == 0 || i == dom.n[d]-1
+            # This ignores the cell at infinity
+            return dx/3
         else
-            return T(0)
+            return T(2)/3*dx
         end
+    elseif j == i+1
+        return dx/6
     else
-        if j == i-1
-            return dx/6
-        elseif j == i
-            if i == 0 || i == n-1
-                return dx/3
-            else
-                return T(2)/3*dx
-            end
-        elseif j == i+1
-            return dx/6
-        else
-            return T(0)
-        end
+        return T(0)
     end
 end
 
-
-
-# Integration weights for basis functions (assuming a diagonal weight matrix)
-export weight
-function weight(dom::Domain{D,T}, d::Int, i::Int)::T where {D, T<:Number}
-    n = dom.n[d]
-    @assert i>=0 && i<n
-    dx = spacing(dom)[d]
-    if dom.staggered[d]
-        return dx
-    else
-        if i == 0
-            return dx/2
-        elseif i < n-1
-            return dx
-        else
-            return dx/2
-        end
-    end
-end
-function weight(dom::Domain{D,T}, i::Vec{D,Int})::T where {D, T<:Number}
-    prod(weight(dom, i[d]) for d in 1:D)
-end
-
-export weights
-function weights(dom::Domain{D,T}, d::Int)::AbstractMatrix{T} where {D,T}
-    # We know the overlaps of the support of the basis functions
-    if dom.staggered[d]
-        dv = [dot_basis(dom, d, i, i) for i in 0:dom.n[d]-1]
-        Diagonal(dv)
-    else
-        dv = [dot_basis(dom, d, i, i) for i in 0:dom.n[d]-1]
-        ev = [dot_basis(dom, d, i, i+1) for i in 0:dom.n[d]-2]
-        SymTridiagonal(dv, ev)
-    end
-end
-function weights(dom::Domain{D,T}) where {D,T}
-    ntuple(d -> weights(dom, d), D)
-end
-
-
-
-# Derivative of basis functions   dϕ^i/dϕ^j
-function deriv_basis(dom::Domain{D,T}, d::Int, i::Int, j::Int)::T where
+export dot_dbasis
+function dot_dbasis(dom::Domain{D,T}, d::Int, i::Int, j::Int)::T where
         {D, T<:Number}
-    @assert !any(dom.staggered) # TODO
-    dx = (dom.xmax[d] - dom.xmin[d]) / (fun.dom.n[d] - 1)
-    if i == 0
-        if j == i
-            return -1/dx
-        elseif j == i+1
-            return 1/dx
-        end
-    elseif i < dom.n[d]
-        if j == i-1
-            return -T(1)/2/dx
-        elseif j == i+1
-            return T(1)/2/dx
-        end
+    @assert !dom.dual
+    @assert dom.staggered[d]
+    @assert i>=0 && i<dom.n[d]
+    @assert j>=0 && j<dom.n[d]
+    dx = spacing(dom)[d]
+    if j == i
+        return 4 / dx
     else
-        if j == i-1
-            return -1/dx
-        elseif j == i
-            return 1/dx
-        end
+        return T(0)
     end
-    T(0)
 end
+
+
+
+export fbasis
+function fbasis(dom::Domain{D,T}, d::Int, i::Int, ix::Int, x::T)::T where
+        {D, T<:Number}
+    if !dom.staggered[d]
+        basis(dom, d, i, ix, x)
+    else
+        dbasis(dom, d, i, ix, x)
+    end
+end
+function fbasis(dom::Domain{D,T}, i::Vec{D,Int}, ix::Vec{D,Int},
+                x::Vec{D,T})::T where
+        {D, T<:Number}
+    prod(fbasis(dom, d, i[d], ix[d], x[d]) for d in 1:D)
+end
+
+export dot_fbasis
+function dot_fbasis(dom::Domain{D,T}, d::Int, i::Int, j::Int)::T where
+        {D, T<:Number}
+    if !dom.staggered[d]
+        dot_basis(dom, d, i, j)
+    else
+        dot_dbasis(dom, d, i, j)
+    end
+end
+function dot_fbasis(dom::Domain{D,T}, d::Int)::AbstractMatrix{T} where
+        {D, T<:Number}
+    if !dom.staggered[d]
+        dv = [dot_fbasis(dom, d, i, i) for i in 0:dom.n[d]-1]
+        ev = [dot_fbasis(dom, d, i, i+1) for i in 0:dom.n[d]-2]
+        SymTridiagonal(dv, ev)
+    else
+        dv = [dot_fbasis(dom, d, i, i) for i in 0:dom.n[d]-1]
+        Diagonal(dv)
+    end
+end
+function dot_fbasis(dom::Domain{D,T})::NTuple{D, AbstractMatrix{T}} where
+        {D, T<:Number}
+    ntuple(d -> dot_fbasis(dom, d), D)
+end
+
+
+
+# # Integration weights for basis functions
+# export weight
+# function weight(dom::Domain{D,T}, d::Int, i::Int)::T where {D, T<:Number}
+#     n = dom.n[d]
+#     @assert i>=0 && i<n
+#     dx = spacing(dom)[d]
+#     if dom.staggered[d]
+#         return dx
+#     else
+#         if i == 0
+#             return dx/2
+#         elseif i < n-1
+#             return dx
+#         else
+#             return dx/2
+#         end
+#     end
+# end
+# function weight(dom::Domain{D,T}, i::Vec{D,Int})::T where {D, T<:Number}
+#     prod(weight(dom, i[d]) for d in 1:D)
+# end
+# 
+# export weights
+# function weights(dom::Domain{D,T}, d::Int)::AbstractMatrix{T} where {D,T}
+#     # We know the overlaps of the support of the basis functions
+#     if dom.staggered[d]
+#         dv = [dot_basis(dom, d, i, i) for i in 0:dom.n[d]-1]
+#         Diagonal(dv)
+#     else
+#         dv = [dot_basis(dom, d, i, i) for i in 0:dom.n[d]-1]
+#         ev = [dot_basis(dom, d, i, i+1) for i in 0:dom.n[d]-2]
+#         SymTridiagonal(dv, ev)
+#     end
+# end
+# function weights(dom::Domain{D,T}) where {D,T}
+#     ntuple(d -> weights(dom, d), D)
+# end
 
 end

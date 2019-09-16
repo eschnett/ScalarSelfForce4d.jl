@@ -16,7 +16,6 @@ using ..Vecs
 export Fun
 struct Fun{D,T,U} <: DenseArray{T, D}
     dom::Domain{D,T}
-    # staggered::Vec{D,Bool}
     coeffs::Array{U,D}
 end
 
@@ -158,8 +157,6 @@ end
 
 # Fun are a category
 
-# TODO: composition
-
 function fidentity(dom::Domain{1,T})::Fun{1,T,T} where {T<:Number}
     if dom.staggered[1]
         dx = (dom.xmax[1] - dom.xmin[1]) / dom.n[1]
@@ -191,6 +188,8 @@ end
 #     Fun{1,T,T}(dom, cs)
 # end
 
+# TODO: composition
+
 function fconst(dom::Domain{D,T}, f::U)::Fun{D,T,U} where {D, T<:Number, U}
     cs = fill(f, dom.n.elts)
     Fun{D,T,U}(dom, cs)
@@ -200,57 +199,51 @@ end
 
 # Evaluate a function
 function (fun::Fun{D,T,U})(x::Vec{D,T})::U where {D, T<:Number, U}
-    # f = U(0)
-    # for ic in CartesianIndices(size(fun.coeffs))
-    #     i = Vec(ic.I) .- 1
-    #     f += U(basis(fun.dom, i, x) * fun.coeffs[ic])
-    # end
-    # f
-
     dom = fun.dom
-    num_regions = 2 .- convert(Vec{D,Int}, dom.staggered)
-    q = Vec{D,T}(ntuple(d -> linear(dom.xmin[d], T(0),
-                                    dom.xmax[d], T(dom.n[d]+dom.staggered[d]-1),
-                                    x[d]), D))
-    # using round instead of floor to avoid bias
-    i = Vec{D,Int}(ntuple(d -> max(0, min(dom.n[d] - num_regions[d],
-                                          round(Int, q[d] - T(1)/2))), D))
+    @assert !dom.dual
+    ix = Vec{D,Int}(ntuple(D) do d
+        q = linear(dom.xmin[d], T(0),
+                   dom.xmax[d], T(dom.n[d] + dom.staggered[d] - 1), x[d])
+        iq = floor(Int, q)
+        max(0, min(dom.n[d] + dom.staggered[d] - 2, iq))
+    end)
 
     f = U(0)
-    for rc in CartesianIndices(num_regions.elts)
-        r = Vec(rc.I) .- 1
-        j = i + r
-        jc = CartesianIndex(j.elts .+ 1)
-        f += U(basis1(dom, j, x) * fun.coeffs[jc])
+    for dic in CartesianIndices(ntuple(d -> 0:!dom.staggered[d], D))
+        di = Vec(dic.I)
+        i = ix + di
+        if all((i .>= 0) & (i .< dom.n))
+            ic = CartesianIndex((i .+ 1).elts)
+            f += U(fbasis(dom, i, ix, x) * fun.coeffs[ic])
+        end
     end
     f
 end
 
 # Create a discretized function by projecting onto the basis functions
+#     f(x) = c^j b_j(x)
+#     int b_i(x) f(x) = int b_i(x) c^j b_j(x)
+#                     = c^j int b_i(x) b_j(x)
 export approximate
 function approximate(fun, dom::Domain{D,T})::Fun{D,T} where {D, T<:Number}
     U = typeof(fun(dom.xmin))
-
-    # To ensure smooth kernels, VC direction are integrated in 2
-    # steps, CC regions in 1 step
-    num_regions = 2 .- convert(Vec{D,Int}, dom.staggered)
-    offset = (T(1)/2) * convert(Vec{D,T}, dom.staggered)
 
     fs = Array{U,D}(undef, dom.n.elts)
     for ic in CartesianIndices(size(fs))
         i = Vec(ic.I) .- 1
         f = U(0)
-        function kernel(x0::NTuple{D})::U
-            x = Vec{D,T}(x0)
-            fun(x) * U(basis(dom, i, x))
-        end
-        for rc in CartesianIndices(num_regions.elts)
-            r = Vec(rc.I) .- 1
-            j = i - r
-            if all(dom.staggered .| ((j .>= 0) .& (j .< dom.n .- 1)))
-                x0 = coord(dom, j - offset)
-                x1 = coord(dom, j - offset .+ 1)
-                # n = convert(Vec{D,Int}, 8)
+        # To ensure smooth kernels we integrate in two sub-regions for
+        # non-staggered directions
+        for dic in CartesianIndices(ntuple(d -> 0:!dom.staggered[d], D))
+            di = Vec(dic.I)
+            ix = i - di
+            if all((ix .>= 0) & (ix .< dom.n + dom.staggered .- 1))
+                function kernel(x0::NTuple{D})::U
+                    x = Vec{D,T}(x0)
+                    fun(x) * U(fbasis(dom, i, ix, x))
+                end
+                x0 = coord(dom, ix)
+                x1 = coord(dom, ix .+ 1)
                 n = convert(Vec{D,Int}, 4)
                 f += quad(kernel, U, x0.elts, x1.elts, n.elts)
             end
@@ -258,41 +251,41 @@ function approximate(fun, dom::Domain{D,T})::Fun{D,T} where {D, T<:Number}
         fs[ic] = f
     end
 
-    Ws = weights(dom)
+    Ms = dot_fbasis(dom)
 
     n = dom.n
     cs = fs
     if D == 1
-        cs[:] = Ws[1] \ cs[:]
+        cs[:] = Ms[1] \ cs[:]
     elseif D == 2
         for i2 in 1:n[2]
-            cs[:,i2] = Ws[1] \ cs[:,i2]
+            cs[:,i2] = Ms[1] \ cs[:,i2]
         end
         for i1 in 1:n[1]
-            cs[i1,:] = Ws[2] \ cs[i1,:]
+            cs[i1,:] = Ms[2] \ cs[i1,:]
         end
     elseif D == 3
         for i3 in 1:n[3], i2 in 1:n[2]
-            cs[:,i2,i3] = Ws[1] \ cs[:,i2,i3]
+            cs[:,i2,i3] = Ms[1] \ cs[:,i2,i3]
         end
         for i3 in 1:n[3], i1 in 1:n[1]
-            cs[i1,:,i3] = Ws[2] \ cs[i1,:,i3]
+            cs[i1,:,i3] = Ms[2] \ cs[i1,:,i3]
         end
         for i2 in 1:n[2], i1 in 1:n[1]
-            cs[i1,i2,:] = Ws[3] \ cs[i1,i2,:]
+            cs[i1,i2,:] = Ms[3] \ cs[i1,i2,:]
         end
     elseif D == 4
         for i4 in 1:n[4], i3 in 1:n[3], i2 in 1:n[2]
-            cs[:,i2,i3,i4] = Ws[1] \ cs[:,i2,i3,i4]
+            cs[:,i2,i3,i4] = Ms[1] \ cs[:,i2,i3,i4]
         end
         for i4 in 1:n[4], i3 in 1:n[3], i1 in 1:n[1]
-            cs[i1,:,i3,i4] = Ws[2] \ cs[i1,:,i3,i4]
+            cs[i1,:,i3,i4] = Ms[2] \ cs[i1,:,i3,i4]
         end
         for i4 in 1:n[4], i2 in 1:n[2], i1 in 1:n[1]
-            cs[i1,i2,:,i4] = Ws[3] \ cs[i1,i2,:,i4]
+            cs[i1,i2,:,i4] = Ms[3] \ cs[i1,i2,:,i4]
         end
         for i3 in 1:n[3], i2 in 1:n[2], i1 in 1:n[1]
-            cs[i1,i2,i3,:] = Ws[4] \ cs[i1,i2,i3,:]
+            cs[i1,i2,i3,:] = Ms[4] \ cs[i1,i2,i3,:]
         end
     else
         @assert false
@@ -308,47 +301,56 @@ function approximate_delta(dom::Domain{D,T}, x::Vec{D,T})::Fun{D,T,T} where
         {D, T<:Number}
     @assert !any(dom.staggered) # TODO
 
-    fs = Array{T,D}(undef, dom.n.elts)
-    for ic in CartesianIndices(size(fs))
-        i = Vec(ic.I) .- 1
-        fs[ic] = basis(dom, i, x)
+    fs = zeros(T, dom.n.elts)
+    ix = Vec{D,Int}(ntuple(D) do d
+        q = linear(dom.xmin[d], T(0), dom.xmax[d], T(dom.n[d] - 1), x[d])
+        iq = floor(Int, q)
+        max(0, min(dom.n[d] - num_regions[d], iq))
+    end)
+    for dic in CartesianIndices(ntuple(d -> 0:1, D))
+        di = Vec(dic.I)
+        i = ix - di
+        if all((i .>= 0) & (i .< dom.n))
+            ic = CartesianIndex((i .+ 1).elts)
+            f[ic] = basis(dom, i, ix, x)
+        end
     end
 
-    Ws = weights(dom)
+    Ms = dot_fbasis(dom)
 
     n = dom.n
     cs = fs
     if D == 1
-        cs[:] = Ws[1] \ cs[:]
+        cs[:] = Ms[1] \ cs[:]
     elseif D == 2
         for i2 in 1:n[2]
-            cs[:,i2] = Ws[1] \ cs[:,i2]
+            cs[:,i2] = Ms[1] \ cs[:,i2]
         end
         for i1 in 1:n[1]
-            cs[i1,:] = Ws[2] \ cs[i1,:]
+            cs[i1,:] = Ms[2] \ cs[i1,:]
         end
     elseif D == 3
         for i3 in 1:n[3], i2 in 1:n[2]
-            cs[:,i2,i3] = Ws[1] \ cs[:,i2,i3]
+            cs[:,i2,i3] = Ms[1] \ cs[:,i2,i3]
         end
         for i3 in 1:n[3], i1 in 1:n[1]
-            cs[i1,:,i3] = Ws[2] \ cs[i1,:,i3]
+            cs[i1,:,i3] = Ms[2] \ cs[i1,:,i3]
         end
         for i2 in 1:n[2], i1 in 1:n[1]
-            cs[i1,i2,:] = Ws[3] \ cs[i1,i2,:]
+            cs[i1,i2,:] = Ms[3] \ cs[i1,i2,:]
         end
     elseif D == 4
         for i4 in 1:n[4], i3 in 1:n[3], i2 in 1:n[2]
-            cs[:,i2,i3,i4] = Ws[1] \ cs[:,i2,i3,i4]
+            cs[:,i2,i3,i4] = Ms[1] \ cs[:,i2,i3,i4]
         end
         for i4 in 1:n[4], i3 in 1:n[3], i1 in 1:n[1]
-            cs[i1,:,i3,i4] = Ws[2] \ cs[i1,:,i3,i4]
+            cs[i1,:,i3,i4] = Ms[2] \ cs[i1,:,i3,i4]
         end
         for i4 in 1:n[4], i2 in 1:n[2], i1 in 1:n[1]
-            cs[i1,i2,:,i4] = Ws[3] \ cs[i1,i2,:,i4]
+            cs[i1,i2,:,i4] = Ms[3] \ cs[i1,i2,:,i4]
         end
         for i3 in 1:n[3], i2 in 1:n[2], i1 in 1:n[1]
-            cs[i1,i2,i3,:] = Ws[4] \ cs[i1,i2,i3,:]
+            cs[i1,i2,i3,:] = Ms[4] \ cs[i1,i2,i3,:]
         end
     else
         @assert false
