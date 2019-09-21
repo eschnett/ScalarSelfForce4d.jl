@@ -7,4 +7,4 @@ function testOps()
     end
 end
 
-@warn "testOps()"
+testOps()

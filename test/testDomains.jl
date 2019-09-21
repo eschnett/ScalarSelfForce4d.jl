@@ -53,4 +53,4 @@ function testDomains()
 
 end
 
-@warn "testDomains()"
+testDomains()

@@ -15,4 +15,4 @@ function testBases()
     end
 end
 
-@warn "testBases()"
+testBases()

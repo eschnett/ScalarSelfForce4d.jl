@@ -73,4 +73,4 @@ function testDefs()
 
 end
 
-@warn "testDefs()"
+testDefs()

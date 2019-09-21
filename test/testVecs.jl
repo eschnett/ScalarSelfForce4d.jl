@@ -16,4 +16,4 @@ function testVecs()
 
 end
 
-@warn "testVecs()"
+testVecs()

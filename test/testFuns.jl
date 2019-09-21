@@ -176,4 +176,4 @@ function testFuns()
     end
 end
 
-@warn "testFuns()"
+testFuns()

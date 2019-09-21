@@ -48,4 +48,4 @@ function testQuadrature()
 
 end
 
-@warn "testQuadrature()"
+testQuadrature()
