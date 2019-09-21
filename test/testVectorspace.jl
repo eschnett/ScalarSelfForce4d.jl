@@ -1,5 +1,5 @@
 function testVectorspace(z::U, as::AbstractVector{T},
-                         xs::AbstractVector{U}, iseq) where {T<:Number, U}
+                         xs::AbstractVector{U}, iseq) where {T <: Number,U}
     @test T === eltype(U)
 
     @testset "Vectorspace.setup $U" begin
@@ -18,25 +18,25 @@ function testVectorspace(z::U, as::AbstractVector{T},
             @test x isa U
             @test (x + z) isa U
         end
-        for (x,y) in zip(xs, ys)
+        for (x, y) in zip(xs, ys)
             @test (x + y) isa U
         end
         for a in as
             @test a isa T
         end
-        for (a,x) in zip(as, xs)
+        for (a, x) in zip(as, xs)
             @test (a * x) isa U
         end
     end
 
     @testset "Vectorspace.add.assoc $U" begin
-        for (x,y,z) in zip(xs, ys, zs)
+        for (x, y, z) in zip(xs, ys, zs)
             @test iseq(x + (y + z), (x + y) + z)
         end
     end
 
     @testset "Vectorspace.add.comm $U" begin
-        for (x,y) in zip(xs, ys)
+        for (x, y) in zip(xs, ys)
             @test iseq(x + y, y + x)
         end
     end
@@ -61,7 +61,7 @@ function testVectorspace(z::U, as::AbstractVector{T},
             @test iseq((-x) + x, z)
             @test iseq(x - x, z)
         end
-        for (x,y) in zip(xs, ys)
+        for (x, y) in zip(xs, ys)
             @test iseq(x - y, x + (-y))
         end
     end
@@ -77,11 +77,11 @@ function testVectorspace(z::U, as::AbstractVector{T},
             @test iseq(a * z, z)
             @test iseq(z * a, z)
             if a != zero(T)
-            @test iseq(a \ z, z)
-            @test iseq(z / a, z)
+                @test iseq(a \ z, z)
+                @test iseq(z / a, z)
             end
         end
-        for (a,x) in zip(as, xs)
+        for (a, x) in zip(as, xs)
             @test iseq(a * x, x * a)
             @test iseq((-a) * x, a * (-x))
             if a != zero(T)
@@ -91,10 +91,10 @@ function testVectorspace(z::U, as::AbstractVector{T},
                 @test iseq((x * a) * inv(a), x)
             end
         end
-        for (a,b,x) in zip(as, bs, xs)
+        for (a, b, x) in zip(as, bs, xs)
             @test iseq(a * (b * x), (a * b) * x)
         end
-        for (a,x,y) in zip(as, xs, ys)
+        for (a, x, y) in zip(as, xs, ys)
             @test iseq(a * (x + y), a * x + a * y)
             @test iseq((x + y) * a, x * a + y * a)
         end

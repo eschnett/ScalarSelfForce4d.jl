@@ -29,7 +29,7 @@ function testQuadrature()
         for n in 1:20
             # Define a polynomial
             coeffs = T[T(rand(-10:10)) / 10 for i in 1:n]
-            poly(cs, x) = sum(c * x^(i-1) for (i,c) in enumerate(cs))
+            poly(cs, x) = sum(c * x^(i - 1) for (i, c) in enumerate(cs))
             poly(cs, x::Tuple) = poly(x[1])
             intcoeffs = T[0; [coeffs[i] / i for i in 1:n]]
             poly(x) = poly(coeffs, x)
@@ -37,11 +37,11 @@ function testQuadrature()
     
             xmin = T(rand(-10:10)) / 10
             xmax = T(rand(-10:10)) / 10
-            xmin,xmax = minmax(xmin, xmax)
+            xmin, xmax = minmax(xmin, xmax)
             if xmin != xmax
                 int = quad(poly, T, (xmin,), (xmax,), (n,))
                 @test typeof(int) === T
-                @test isapprox(int, intpoly(xmax) - intpoly(xmin); atol=atol)
+                @test isapprox(int, intpoly(xmax) - intpoly(xmin); atol = atol)
             end
         end
     end

@@ -170,6 +170,12 @@ git-tree-sha1 = "4d30e889c9f106a51ffa4791a88ffd4765bf20c3"
 uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.7.0"
 
+[[DocumentFormat]]
+deps = ["CSTParser", "Tokenize"]
+git-tree-sha1 = "a559362c20b278f1110c5e8a812df053ab01035b"
+uuid = "ffa9a821-9c82-50df-894e-fbcef3ed31cd"
+version = "0.4.1"
+
 [[FFTW]]
 deps = ["AbstractFFTs", "BinaryProvider", "Conda", "Libdl", "LinearAlgebra", "Reexport", "Test"]
 git-tree-sha1 = "e1a479d3c972f20c9a70563eec740bbfc786f515"

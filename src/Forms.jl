@@ -15,24 +15,24 @@ using ..Vecs
 
 
 export Form
-struct Form{D, R, Dual, T, U}
-    dom::Domain{D, T}
-    comps::Dict{Vec{R,Int}, Fun{D,T,U}}
+struct Form{D,R,Dual,T,U}
+    dom::Domain{D,T}
+    comps::Dict{Vec{R,Int},Fun{D,T,U}}
     # infval::Union{Nothing, U}   # value at infinity for R == (!Dual ? R : 0)
 
-    function Form(dict::Dict{Vec{R,Int}, Fun{D,T,U}}) where {D, R, T, U}
+    function Form(dict::Dict{Vec{R,Int},Fun{D,T,U}}) where {D,R,T,U}
         # infval::Union{Nothing, U}=nothing)
         @assert D isa Int && 0 <= D
         @assert R isa Int && 0 <= R <= D
         # @assert (infval isa U) == (R == (!Dual ? R : 0))
 
-        i0 = Vec{R,Int}(ntuple(d -> d, R))
+        i0 = Vec{R,Int}(ntuple(d->d, R))
         f0 = dict[i0]
         dom = makeunstaggered(f0.dom)
 
         count = 0
-        for i in CartesianIndices(ntuple(d -> D, R))
-            !all(i[d+1] > i[d] for d in 1:R-1) && continue
+        for i in CartesianIndices(ntuple(d->D, R))
+            !all(i[d + 1] > i[d] for d in 1:R - 1) && continue
             count += 1
             f = dict[Vec{R,Int}(i.I)]
             @assert f.dom.dual == dom.dual
@@ -48,14 +48,14 @@ struct Form{D, R, Dual, T, U}
         end
         @assert length(dict) == count
 
-        new{D, R, dom.dual, T, U}(dom, copy(dict))
+        new{D,R,dom.dual,T,U}(dom, copy(dict))
         # infval)
     end
 end
 
-function Form(dict::Dict{NTuple{R,Int}, Fun{D,T,U}}) where {D, R, T, U}
+function Form(dict::Dict{NTuple{R,Int},Fun{D,T,U}}) where {D,R,T,U}
     # infval::Union{Nothing, U}=nothing)
-    Form(Dict(Vec{R,Int}(k) => v for (k,v) in dict))
+    Form(Dict(Vec{R,Int}(k) => v for (k, v) in dict))
     # infval)
 end
 
@@ -101,11 +101,11 @@ end
 
 
 
-function Base.zeros(::Type{Form{D, R, Dual, T, U}}, dom::Domain{D, T})::Form{D, R, Dual, T, U} where {D, R, Dual, T, U}
+function Base.zeros(::Type{Form{D,R,Dual,T,U}}, dom::Domain{D,T})::Form{D,R,Dual,T,U} where {D,R,Dual,T,U}
     dom = makedual(dom, Dual)
-    comps = Dict{Vec{R,Int}, Fun{D,T,U}}()
-    for staggeredc in CartesianIndices(ntuple(d -> 0:1, D))
-        staggered = Vec{D,Bool}(ntuple(d -> Bool(staggeredc[d]), D))
+    comps = Dict{Vec{R,Int},Fun{D,T,U}}()
+    for staggeredc in CartesianIndices(ntuple(d->0:1, D))
+        staggered = Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
         if count(staggered) == R
             idx = Vec{R,Int}(Tuple(staggered2idx(staggered)))
             fdom = makestaggered(dom, staggered)
@@ -117,55 +117,55 @@ function Base.zeros(::Type{Form{D, R, Dual, T, U}}, dom::Domain{D, T})::Form{D, 
     Form(comps)
 end
 
-function Base.:+(f::Form{D, R, Dual, T, U})::Form{D, R, Dual, T, U} where {D, R, Dual, T, U}
-    Form(Dict(i => +fi for (i,fi) in f.comps))
+function Base.:+(f::Form{D,R,Dual,T,U})::Form{D,R,Dual,T,U} where {D,R,Dual,T,U}
+    Form(Dict(i => +fi for (i, fi) in f.comps))
     # f.infval isa Nothing ? nothing : +f.infval)
 end
-function Base.:-(f::Form{D, R, Dual, T, U})::Form{D, R, Dual, T, U} where {D, R, Dual, T, U}
-    Form(Dict(i => -fi for (i,fi) in f.comps))
+function Base.:-(f::Form{D,R,Dual,T,U})::Form{D,R,Dual,T,U} where {D,R,Dual,T,U}
+    Form(Dict(i => -fi for (i, fi) in f.comps))
     # f.infval isa Nothing ? nothing : -f.infval)
 end
 
-function Base.:+(f::Form{D, R, Dual, T, U},
-                 g::Form{D, R, Dual, T, U})::Form{D, R, Dual, T, U} where {D, R, Dual, T, U}
+function Base.:+(f::Form{D,R,Dual,T,U},
+                 g::Form{D,R,Dual,T,U})::Form{D,R,Dual,T,U} where {D,R,Dual,T,U}
     # @assert f.dom == g.dom
     @assert keys(f.comps) == keys(g.comps)
-    Form(Dict(i => fi + g.comps[i] for (i,fi) in f.comps))
+    Form(Dict(i => fi + g.comps[i] for (i, fi) in f.comps))
     # f.infval isa Nothing ? nothing : f.infval + g.infval)
 end
-function Base.:-(f::Form{D, R, Dual, T, U},
-                 g::Form{D, R, Dual, T, U})::Form{D, R, Dual, T, U} where {D, R, Dual, T, U}
+function Base.:-(f::Form{D,R,Dual,T,U},
+                 g::Form{D,R,Dual,T,U})::Form{D,R,Dual,T,U} where {D,R,Dual,T,U}
     # @assert f.dom == g.dom
     @assert keys(f.comps) == keys(g.comps)
-    Form(Dict(i => fi - g.comps[i] for (i,fi) in f.comps))
+    Form(Dict(i => fi - g.comps[i] for (i, fi) in f.comps))
     # f.infval isa Nothing ? nothing : f.infval - g.infval)
 end
 
-function Base.:*(a::U, f::Form{D, R, Dual, T, U})::Form{D, R, Dual, T, U} where {D, R, Dual, T, U}
-    Form(Dict(i => a * fi for (i,fi) in f.comps))
+function Base.:*(a::U, f::Form{D,R,Dual,T,U})::Form{D,R,Dual,T,U} where {D,R,Dual,T,U}
+    Form(Dict(i => a * fi for (i, fi) in f.comps))
     # f.infval isa Nothing ? nothing : a * f.infval)
 end
-function Base.:*(f::Form{D, R, Dual, T, U}, a::U)::Form{D, R, Dual, T, U} where {D, R, Dual, T, U}
-    Form(Dict(i => fi * a for (i,fi) in f.comps))
+function Base.:*(f::Form{D,R,Dual,T,U}, a::U)::Form{D,R,Dual,T,U} where {D,R,Dual,T,U}
+    Form(Dict(i => fi * a for (i, fi) in f.comps))
     # f.infval isa Nothing ? nothing : f.infval * a)
 end
-function Base.:\(a::U, f::Form{D, R, Dual, T, U})::Form{D, R, Dual, T, U} where {D, R, Dual, T, U}
-    Form(Dict(i => a \ fi for (i,fi) in f.comps))
+function Base.:\(a::U, f::Form{D,R,Dual,T,U})::Form{D,R,Dual,T,U} where {D,R,Dual,T,U}
+    Form(Dict(i => a \ fi for (i, fi) in f.comps))
     # f.infval isa Nothing ? nothing : a \ f.infval)
 end
-function Base.:/(f::Form{D, R, Dual, T, U}, a::U)::Form{D, R, Dual, T, U} where {D, R, Dual, T, U}
-    Form(Dict(i => fi / a for (i,fi) in f.comps))
+function Base.:/(f::Form{D,R,Dual,T,U}, a::U)::Form{D,R,Dual,T,U} where {D,R,Dual,T,U}
+    Form(Dict(i => fi / a for (i, fi) in f.comps))
     # f.infval isa Nothing ? nothing : f.infval / a)
 end
 
-function Base.iszero(f::Form{D, R, Dual, T, U},)::Bool where {D, R, Dual, T, U}
-    for (i,fi) in f.comps
+function Base.iszero(f::Form{D,R,Dual,T,U}, )::Bool where {D,R,Dual,T,U}
+    for (i, fi) in f.comps
         iszero(fi) || return false
     end
     return true
 end
-function Base.:(==)(f::Form{D, R, Dual, T, U},
-                    g::Form{D, R, Dual, T, U})::Bool where {D, R, Dual, T, U}
+function Base.:(==)(f::Form{D,R,Dual,T,U},
+                    g::Form{D,R,Dual,T,U})::Bool where {D,R,Dual,T,U}
     # @assert f.dom == g.dom
     # @assert keys(f.comps) == keys(g.comps)
     # # @assert (f.infval isa Nothing) == (g.invfal isa Nothing)
@@ -177,31 +177,31 @@ end
 
 
 export FOp
-struct FOp{D, RI, DualI, RJ, DualJ, T, U}
-    comps::Dict{Vec{RI, Int}, Dict{Vec{RJ, Int}, Op{D, T, U}}}
+struct FOp{D,RI,DualI,RJ,DualJ,T,U}
+    comps::Dict{Vec{RI,Int},Dict{Vec{RJ,Int},Op{D,T,U}}}
 end
 
-function Base.eltype(::Type{FOp{D, RI, DualI, RJ, DualJ, T, U}})::Type where
-        {D, RI, DualI, RJ, DualJ, T, U}
+function Base.eltype(::Type{FOp{D,RI,DualI,RJ,DualJ,T,U}})::Type where
+        {D,RI,DualI,RJ,DualJ,T,U}
     U
 end
 
-function Base.zeros(::Type{FOp{D, RI, DualI, RJ, DualJ, T, U}})::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
-    FOp{D, RI, DualI, RJ, DualJ, T, U}(Dict{Vec{RI, Int}, Dict{Vec{RJ, Int}, Op{D, T, U}}}())
+function Base.zeros(::Type{FOp{D,RI,DualI,RJ,DualJ,T,U}})::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
+    FOp{D,RI,DualI,RJ,DualJ,T,U}(Dict{Vec{RI,Int},Dict{Vec{RJ,Int},Op{D,T,U}}}())
 end
 
-function map1(fun, A::FOp{D, RI, DualI, RJ, DualJ, T, U})::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
-    FOp{D, RI, DualI, RJ, DualJ, T, U}(Dict(i => Dict(j => fun(Aj) for (j,Aj) in Ai) for (i,Ai) in A.comps))
+function map1(fun, A::FOp{D,RI,DualI,RJ,DualJ,T,U})::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
+    FOp{D,RI,DualI,RJ,DualJ,T,U}(Dict(i => Dict(j => fun(Aj) for (j, Aj) in Ai) for (i, Ai) in A.comps))
 end
 function map2(fun,
-              A::FOp{D, RI, DualI, RJ, DualJ, T, U},
-              B::FOp{D, RI, DualI, RJ, DualJ, T, U})::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
-    idict = Dict{Vec{RI,Int}, Dict{Vec{RJ,Int}, Op{D,T,U}}}()
+              A::FOp{D,RI,DualI,RJ,DualJ,T,U},
+              B::FOp{D,RI,DualI,RJ,DualJ,T,U})::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
+    idict = Dict{Vec{RI,Int},Dict{Vec{RJ,Int},Op{D,T,U}}}()
     for X in (A, B)
-        for (i,Xi) in X.comps
-            for (j,Xij) in Xi
+        for (i, Xi) in X.comps
+            for (j, Xij) in Xi
                 jdict = get!(idict, i) do
-                    Dict{Vec{RJ,Int}, Op{D,T,U}}()
+                    Dict{Vec{RJ,Int},Op{D,T,U}}()
                 end
                 prev = get(jdict, j, missing)
                 next = prev === missing ? Xij : fun(prev, Xij)
@@ -209,63 +209,63 @@ function map2(fun,
             end
         end
     end
-    FOp{D, RI, DualI, RJ, DualJ, T, U}(idict)
+    FOp{D,RI,DualI,RJ,DualJ,T,U}(idict)
 end
 
-function Base.:+(A::FOp{D, RI, DualI, RJ, DualJ, T, U})::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
+function Base.:+(A::FOp{D,RI,DualI,RJ,DualJ,T,U})::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
     map1(+, A)
 end
-function Base.:-(A::FOp{D, RI, DualI, RJ, DualJ, T, U})::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
+function Base.:-(A::FOp{D,RI,DualI,RJ,DualJ,T,U})::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
     map1(-, A)
 end
 
-function Base.:+(A::FOp{D, RI, DualI, RJ, DualJ, T, U},
-                 B::FOp{D, RI, DualI, RJ, DualJ, T, U})::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
+function Base.:+(A::FOp{D,RI,DualI,RJ,DualJ,T,U},
+                 B::FOp{D,RI,DualI,RJ,DualJ,T,U})::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
     map2(+, A, B)
 end
-function Base.:-(A::FOp{D, RI, DualI, RJ, DualJ, T, U},
-                 B::FOp{D, RI, DualI, RJ, DualJ, T, U})::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
+function Base.:-(A::FOp{D,RI,DualI,RJ,DualJ,T,U},
+                 B::FOp{D,RI,DualI,RJ,DualJ,T,U})::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
     map2(-, A, B)
 end
 
-function Base.:*(a::U, A::FOp{D, RI, DualI, RJ, DualJ, T, U})::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
-    map1(x -> a*x, A)
+function Base.:*(a::U, A::FOp{D,RI,DualI,RJ,DualJ,T,U})::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
+    map1(x->a * x, A)
 end
-function Base.:*(A::FOp{D, RI, DualI, RJ, DualJ, T, U}, a::U)::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
-    map1(x -> x*a, A)
+function Base.:*(A::FOp{D,RI,DualI,RJ,DualJ,T,U}, a::U)::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
+    map1(x->x * a, A)
 end
-function Base.:\(a::U, A::FOp{D, RI, DualI, RJ, DualJ, T, U})::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
-    map1(x -> a\x, A)
+function Base.:\(a::U, A::FOp{D,RI,DualI,RJ,DualJ,T,U})::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
+    map1(x->a \ x, A)
 end
-function Base.:/(A::FOp{D, RI, DualI, RJ, DualJ, T, U}, a::U)::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
-    map1(x -> x/a, A)
+function Base.:/(A::FOp{D,RI,DualI,RJ,DualJ,T,U}, a::U)::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
+    map1(x->x / a, A)
 end
 
-function Base.iszero(A::FOp{D, RI, DualI, RJ, DualJ, T, U})::Bool where {D, RI, DualI, RJ, DualJ, T, U}
-    for (i,Ai) in A.comps
-        for (j,Aij) in Ai
+function Base.iszero(A::FOp{D,RI,DualI,RJ,DualJ,T,U})::Bool where {D,RI,DualI,RJ,DualJ,T,U}
+    for (i, Ai) in A.comps
+        for (j, Aij) in Ai
             iszero(Aij) || return false
         end
     end
     return true
 end
 
-function Base.:(==)(A::FOp{D, RI, DualI, RJ, DualJ, T, U},
-                    B::FOp{D, RI, DualI, RJ, DualJ, T, U})::Bool where {D, RI, DualI, RJ, DualJ, T, U}
+function Base.:(==)(A::FOp{D,RI,DualI,RJ,DualJ,T,U},
+                    B::FOp{D,RI,DualI,RJ,DualJ,T,U})::Bool where {D,RI,DualI,RJ,DualJ,T,U}
     iszero(A - B)
 end
 
 
 
-function Base.zero(::Type{FOp{D, RI, DualI, RJ, DualJ, T, U}})::FOp{D, RI, DualI, RJ, DualJ, T, U} where {D, RI, DualI, RJ, DualJ, T, U}
-    zeros(FOp{D, RI, DualI, RJ, DualJ, T, U})
+function Base.zero(::Type{FOp{D,RI,DualI,RJ,DualJ,T,U}})::FOp{D,RI,DualI,RJ,DualJ,T,U} where {D,RI,DualI,RJ,DualJ,T,U}
+    zeros(FOp{D,RI,DualI,RJ,DualJ,T,U})
 end
-function Base.one(::Type{FOp{D, R, Dual, R, Dual, T, U}},
-                  dom::Domain{D, T})::FOp{D, R, Dual, R, Dual, T, U} where
-        {D, R, Dual, T, U}
-    comps = Dict{Vec{R,Int}, Dict{Vec{R,Int}, Op{D,T,U}}}()
-    for staggeredc in CartesianIndices(ntuple(d -> 0:1, D))
-        staggered = Vec{D,Bool}(ntuple(d -> Bool(staggeredc[d]), D))
+function Base.one(::Type{FOp{D,R,Dual,R,Dual,T,U}},
+                  dom::Domain{D,T})::FOp{D,R,Dual,R,Dual,T,U} where
+        {D,R,Dual,T,U}
+    comps = Dict{Vec{R,Int},Dict{Vec{R,Int},Op{D,T,U}}}()
+    for staggeredc in CartesianIndices(ntuple(d->0:1, D))
+        staggered = Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
         if count(staggered) == R
             idx = Vec{R,Int}(Tuple(staggered2idx(staggered)))
             fdom = makestaggered(makedual(dom, Dual), staggered)
@@ -273,15 +273,15 @@ function Base.one(::Type{FOp{D, R, Dual, R, Dual, T, U}},
             comps[idx] = Dict(idx => op)
         end
     end
-    FOp{D, R, Dual, R, Dual, T, U}(comps)
+    FOp{D,R,Dual,R,Dual,T,U}(comps)
 end
 
-function Base.:*(A::FOp{D, RI, DualI, RJ, DualJ, T, U},
-                 f::Form{D, RJ, DualJ, T, U})::Form{D, RI, DualI, T, U} where
-        {D, RI, DualI, RJ, DualJ, T, U}
-    idict = Dict{Vec{RI, Int}, Fun{D, T, U}}()
-    for (i,Ai) in A.comps
-        for (j,Aij) in Ai
+function Base.:*(A::FOp{D,RI,DualI,RJ,DualJ,T,U},
+                 f::Form{D,RJ,DualJ,T,U})::Form{D,RI,DualI,T,U} where
+        {D,RI,DualI,RJ,DualJ,T,U}
+    idict = Dict{Vec{RI,Int},Fun{D,T,U}}()
+    for (i, Ai) in A.comps
+        for (j, Aij) in Ai
             fj = get(f.comps, j, missing)
             if fj !== missing
                 Af = Aij * fj
@@ -293,18 +293,18 @@ function Base.:*(A::FOp{D, RI, DualI, RJ, DualJ, T, U},
     end
     Form(idict)
 end
-function Base.:*(A::FOp{D, RI, DualI, RK, DualK, T, U},
-                 B::FOp{D, RK, DualK, RJ, DualJ, T, U})::FOp{D, RI, DualI, RJ, DualJ, T, U} where
-        {D, RI, DualI, RJ, DualJ, RK, DualK, T, U}
-    idict = Dict{Vec{RI, Int}, Dict{Vec{RJ, Int}, Op{D, T, U}}}()
-    for (i,Ai) in A.comps
-        for (k,Aik) in Ai
+function Base.:*(A::FOp{D,RI,DualI,RK,DualK,T,U},
+                 B::FOp{D,RK,DualK,RJ,DualJ,T,U})::FOp{D,RI,DualI,RJ,DualJ,T,U} where
+        {D,RI,DualI,RJ,DualJ,RK,DualK,T,U}
+    idict = Dict{Vec{RI,Int},Dict{Vec{RJ,Int},Op{D,T,U}}}()
+    for (i, Ai) in A.comps
+        for (k, Aik) in Ai
             Bk = get(B.comps, k, missing)
             if Bk !== missing
-                for (j,Bkj) in Bk
+                for (j, Bkj) in Bk
                     AB = Aik * Bkj
                     jdict = get!(idict, i) do
-                        Dict{Vec{RJ, Int}, Op{D, T, U}}()
+                        Dict{Vec{RJ,Int},Op{D,T,U}}()
                     end
                     prev = get(jdict, j, missing)
                     next = prev === missing ? AB : prev + AB
@@ -313,19 +313,19 @@ function Base.:*(A::FOp{D, RI, DualI, RK, DualK, T, U},
             end
         end
     end
-    FOp{D, RI, DualI, RJ, DualJ, T, U}(idict)
+    FOp{D,RI,DualI,RJ,DualJ,T,U}(idict)
 end
 
-function Base.:\(A::FOp{D, RI, DualI, RJ, DualJ, T, U},
-                 f::Form{D, RI, DualI, T, U})::Form{D, RJ, DualJ, T, U} where
-        {D, RI, DualI, RJ, DualJ, T, U}
-    @assert RI==0 && RJ==0
+function Base.:\(A::FOp{D,RI,DualI,RJ,DualJ,T,U},
+                 f::Form{D,RI,DualI,T,U})::Form{D,RJ,DualJ,T,U} where
+        {D,RI,DualI,RJ,DualJ,T,U}
+    @assert RI == 0 && RJ == 0
     Form(Dict(() => A.comps[Vec{0,Int}(())][Vec{0,Int}(())] \ f[()]))
 end
 
 
 
-function diff(f::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where {D, T<:Number, U}
+function diff(f::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where {D,T <: Number,U}
     @assert 1 <= dir <= D
 
     dom = f.dom
@@ -333,13 +333,13 @@ function diff(f::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where {D, T<:Number, U}
     rdom = makestaggered(dom, dom.staggered | unitvec(Val(D), dir))
     @assert rdom.staggered[dir]
 
-    di = CartesianIndex(ntuple(d -> d==dir, D))
+    di = CartesianIndex(ntuple(d->d == dir, D))
 
     cs = f.coeffs
     rcs = Array{U}(undef, rdom.n.elts)
     if !dom.dual
         for i in CartesianIndices(size(rcs))
-            rcs[i] = cs[i+di] - cs[i]
+            rcs[i] = cs[i + di] - cs[i]
         end
     else
         for i in CartesianIndices(size(rcs))
@@ -350,12 +350,12 @@ function diff(f::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where {D, T<:Number, U}
                 # rcs[i] = cs[i+di] - cs[i]
                 # Zero works best
                 rcs[i] = 0
-            elseif i[dir] == size(rcs,dir)
+            elseif i[dir] == size(rcs, dir)
                 # rcs[i] = - cs[i-di]
                 # rcs[i] = cs[i-di] - cs[i-2di]
                 rcs[i] = 0
             else
-                rcs[i] = cs[i] - cs[i-di]
+                rcs[i] = cs[i] - cs[i - di]
             end
         end
     end
@@ -363,14 +363,14 @@ function diff(f::Fun{D,T,U}, dir::Int)::Fun{D,T,U} where {D, T<:Number, U}
     Fun{D,T,U}(rdom, rcs)
 end
 
-function diff(dom::Domain{D, T}, dir::Int)::Op{D,T,T} where {D, T<:Number}
+function diff(dom::Domain{D,T}, dir::Int)::Op{D,T,T} where {D,T <: Number}
     @assert 1 <= dir <= D
 
     @assert !dom.staggered[dir]
     rdom = makestaggered(dom, dom.staggered | unitvec(Val(D), dir))
     @assert rdom.staggered[dir]
 
-    di = CartesianIndex(ntuple(d -> d==dir, D))
+    di = CartesianIndex(ntuple(d->d == dir, D))
 
     ni = rdom.n
     nj = dom.n
@@ -381,9 +381,9 @@ function diff(dom::Domain{D, T}, dir::Int)::Op{D,T,T} where {D, T<:Number}
     I = Int[]
     J = Int[]
     V = T[]
-    sizehint!(I, 2*prod(ni))
-    sizehint!(J, 2*prod(ni))
-    sizehint!(V, 2*prod(ni))
+    sizehint!(I, 2 * prod(ni))
+    sizehint!(J, 2 * prod(ni))
+    sizehint!(V, 2 * prod(ni))
     function ins!(i, j, v)
         @assert all(0 .< i.I .<= ni)
         @assert all(0 .< j.I .<= nj)
@@ -396,7 +396,7 @@ function diff(dom::Domain{D, T}, dir::Int)::Op{D,T,T} where {D, T<:Number}
         for i in CartesianIndices(ni.elts)
             # rcs[i] = cs[i+di] - cs[i]
             ins!(i, i, -1)
-            ins!(i, i+di, 1)
+            ins!(i, i + di, 1)
         end
     else
         for i in CartesianIndices(ni.elts)
@@ -413,7 +413,7 @@ function diff(dom::Domain{D, T}, dir::Int)::Op{D,T,T} where {D, T<:Number}
                 # rcs[i] = 0
             else
                 # rcs[i] = cs[i] - cs[i-di]
-                ins!(i, i-di, -1)
+                ins!(i, i - di, -1)
                 ins!(i, i, 1)
             end
         end
@@ -426,7 +426,7 @@ end
 
 
 function wedge(f::Form{D,RI,Dual,T,U},
-               g::Form{D,RJ,Dual,T,U})::Form{D,RI+RJ,Dual,T,U} where
+               g::Form{D,RJ,Dual,T,U})::Form{D,RI + RJ,Dual,T,U} where
         {D,RI,RJ,Dual,T,U}
     domi = f.dom
     domj = f.dom
@@ -435,7 +435,7 @@ function wedge(f::Form{D,RI,Dual,T,U},
 
     @assert !Dual               # TODO
 
-    di = CartesianIndex(ntuple(d -> d==dir, D))
+    di = CartesianIndex(ntuple(d->d == dir, D))
 
     if RI == 0 && RJ == 0
         u0 = f[()]
@@ -453,8 +453,8 @@ function wedge(f::Form{D,RI,Dual,T,U},
             dom1x = makestaggered(dom, ((true,)))
             r1x = Array{U}(undef, dom1x.n.elts)
             for i in CartesianIndices(size(r1x))
-                r1x[i] = T(1)/2 * (+ u1x[i] * v1y[i]
-                                   - u1x[i+di[1]] * v1y[i])
+                r1x[i] = T(1) / 2 * (+ u1x[i] * v1y[i]
+                                   - u1x[i + di[1]] * v1y[i])
             end
             Form(Dict((1,) => Fun(dom1x, r1x)))
         elseif D == 2
@@ -465,13 +465,13 @@ function wedge(f::Form{D,RI,Dual,T,U},
             dom1y = makestaggered(dom, ((false, true)))
             r1x = Array{U}(undef, dom1x.n.elts)
             for i in CartesianIndices(size(r1x))
-                r1x[i] = T(1)/2 * (+ u1x[i] * v0[i]
-                                   - u1x[i] * v0[i+di[1]])
+                r1x[i] = T(1) / 2 * (+ u1x[i] * v0[i]
+                                   - u1x[i] * v0[i + di[1]])
             end
             r1y = Array{U}(undef, dom1y.n.elts)
             for i in CartesianIndices(size(r1y))
-                r1y[i] = T(1)/2 * (+ u1y[i] * v0[i]
-                                   - u1y[i] * v0[i+di[2]])
+                r1y[i] = T(1) / 2 * (+ u1y[i] * v0[i]
+                                   - u1y[i] * v0[i + di[2]])
             end
             Form(Dict((1,) => Fun(dom1x, r1x), (2,) => Fun(dom1y, r1y)))
         else
@@ -484,8 +484,8 @@ function wedge(f::Form{D,RI,Dual,T,U},
             dom1x = makestaggered(dom, ((true,)))
             r1x = Array{U}(undef, dom1x.n.elts)
             for i in CartesianIndices(size(r1x))
-                r1x[i] = T(1)/2 * (+ u0[i] * v1x[i]
-                                   - u0[i] * v1x[i+di[1]])
+                r1x[i] = T(1) / 2 * (+ u0[i] * v1x[i]
+                                   - u0[i] * v1x[i + di[1]])
             end
             Form(Dict((1,) => Fun(dom1x, r1x)))
         elseif D == 2
@@ -496,13 +496,13 @@ function wedge(f::Form{D,RI,Dual,T,U},
             dom1y = makestaggered(dom, ((false, true)))
             r1x = Array{U}(undef, dom1x.n.elts)
             for i in CartesianIndices(size(r1x))
-                r1x[i] = T(1)/2 * (+ u0[i] * v1x[i]
-                                   - u0[i] * v1x[i+di[1]])
+                r1x[i] = T(1) / 2 * (+ u0[i] * v1x[i]
+                                   - u0[i] * v1x[i + di[1]])
             end
             r1y = Array{U}(undef, dom1y.n.elts)
             for i in CartesianIndices(size(r1y))
-                r1y[i] = T(1)/2 * (+ u0[i] * v1y[i]
-                                   - u0[i] * v1y[i+di[2]])
+                r1y[i] = T(1) / 2 * (+ u0[i] * v1y[i]
+                                   - u0[i] * v1y[i + di[2]])
             end
             Form(Dict((1,) => Fun(dom1x, r1x), (2,) => Fun(dom1y, r1y)))
         else
@@ -510,33 +510,33 @@ function wedge(f::Form{D,RI,Dual,T,U},
         end
     elseif RI == 2 && RJ == 0
         if D == 2
-            u2xy = f[(1,2)]
+            u2xy = f[(1, 2)]
             v0 = g[()]
             dom2xy = makestaggered(dom, ((true, true)))
             r2xy = Array{U}(undef, dom2xy.n.elts)
             for i in CartesianIndices(size(r2xy))
-                r2xy[i] = T(1)/4 * (+ u2xy[i] * v0[i]
-                                    - u2xy[i+di[1]] * v0[i]
-                                    - u2xy[i+di[2]] * v0[i]
-                                    + u2xy[i+di[1]+di[2]] * v0[i])
+                r2xy[i] = T(1) / 4 * (+ u2xy[i] * v0[i]
+                                    - u2xy[i + di[1]] * v0[i]
+                                    - u2xy[i + di[2]] * v0[i]
+                                    + u2xy[i + di[1] + di[2]] * v0[i])
             end
-            Form(Dict((1,2) => Fun(dom2xy, r2xy)))
+            Form(Dict((1, 2) => Fun(dom2xy, r2xy)))
         else
             @assert false
         end
     elseif RI == 0 && RJ == 2
         if D == 2
             u0 = f[()]
-            v2xy = g[(1,2)]
+            v2xy = g[(1, 2)]
             dom2xy = makestaggered(dom, ((true, true)))
             r2xy = Array{U}(undef, dom2xy.n.elts)
             for i in CartesianIndices(size(r2xy))
-                r2xy[i] = T(1)/4 * (+ u0[i] * v2xy[i]
-                                    - u0[i] * v2xy[i+di[1]]
-                                    - u0[i] * v2xy[i+di[2]]
-                                    + u0[i] * v2xy[i+di[1]+di[2]])
+                r2xy[i] = T(1) / 4 * (+ u0[i] * v2xy[i]
+                                    - u0[i] * v2xy[i + di[1]]
+                                    - u0[i] * v2xy[i + di[2]]
+                                    + u0[i] * v2xy[i + di[1] + di[2]])
             end
-            Form(Dict((1,2) => Fun(dom2xy, r2xy)))
+            Form(Dict((1, 2) => Fun(dom2xy, r2xy)))
         else
             @assert false
         end
@@ -549,12 +549,12 @@ function wedge(f::Form{D,RI,Dual,T,U},
             dom2xy = makestaggered(dom, ((true, true)))
             r2xy = Array{U}(undef, dom2xy.n.elts)
             for i in CartesianIndices(size(r2xy))
-                r2xy[i] = T(1)/4 * (+ u1x[i] * v1y[i]
-                                    - u1x[i+di] * v1y[i]
-                                    - u1x[i+di] * v1y[i+di]
-                                    + u1x[i] * v1y[i+di])
+                r2xy[i] = T(1) / 4 * (+ u1x[i] * v1y[i]
+                                    - u1x[i + di] * v1y[i]
+                                    - u1x[i + di] * v1y[i + di]
+                                    + u1x[i] * v1y[i + di])
             end
-            Form(Dict((1,2) => Fun(dom2xy, r2xy)))
+            Form(Dict((1, 2) => Fun(dom2xy, r2xy)))
         else
             @assert false
         end
@@ -568,19 +568,19 @@ end
 export star
 
 # star[k] ∘ star[n-k] = (-1)^(k (n-k))   [only for Euclidean manifolds?]
-function star(form::Form{D,R,Dual,T,U})::Form{D,D-R,!Dual,T,U} where
-        {D, R, Dual, T<:Number, U}
+function star(form::Form{D,R,Dual,T,U})::Form{D,D - R,!Dual,T,U} where
+        {D,R,Dual,T <: Number,U}
     @assert D >= 0
     @assert 0 <= R <= D
 
     dx = spacing(form.dom)
-    rcomps = Dict{Vec{D-R,Int}, Fun{D,T,U}}()
+    rcomps = Dict{Vec{D - R,Int},Fun{D,T,U}}()
     for (idx, comp) in form.comps
         dom = comp.dom
-        idx::Vec{R, Int}
+        idx::Vec{R,Int}
         @assert collect(idx) == staggered2idx(dom.staggered)
         rdom = makedual(dom, !Dual)
-        ridx = Vec{D-R,Int}(Tuple(staggered2idx(rdom.staggered)))
+        ridx = Vec{D - R,Int}(Tuple(staggered2idx(rdom.staggered)))
         s = levicivita([idx..., ridx...])
         scale = prod(!rdom.staggered[d] ? inv(dx[d]) : dx[d] for d in 1:D)
         rcomp = U(s * scale) * Fun(rdom, comp.coeffs)
@@ -591,15 +591,15 @@ function star(form::Form{D,R,Dual,T,U})::Form{D,D-R,!Dual,T,U} where
 end
 
 function star(::Val{R}, ::Val{Dual},
-              dom::Domain{D, T})::FOp{D, D-R, !Dual, R, Dual, T, T} where
-        {R, Dual, D, T<:Number}
+              dom::Domain{D,T})::FOp{D,D - R,!Dual,R,Dual,T,T} where
+        {R,Dual,D,T <: Number}
     @assert D >= 0
     @assert 0 <= R <= D
 
     dom = makedual(dom, Dual)
-    rcomps = Dict{Vec{D-R, Int}, Dict{Vec{R, Int}, Op{D, T, T}}}()
-    for staggeredc in CartesianIndices(ntuple(d -> 0:1, D))
-        staggered = Vec{D,Bool}(ntuple(d -> Bool(staggeredc[d]), D))
+    rcomps = Dict{Vec{D - R,Int},Dict{Vec{R,Int},Op{D,T,T}}}()
+    for staggeredc in CartesianIndices(ntuple(d->0:1, D))
+        staggered = Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
         if count(staggered) == R
 
             odom = makestaggered(dom, staggered)
@@ -630,7 +630,7 @@ function star(::Val{R}, ::Val{Dual},
 
             dx = spacing(rdom)
             oidx = Vec{R,Int}(Tuple(staggered2idx(odom.staggered)))
-            ridx = Vec{D-R,Int}(Tuple(staggered2idx(rdom.staggered)))
+            ridx = Vec{D - R,Int}(Tuple(staggered2idx(rdom.staggered)))
             s = levicivita([oidx..., ridx...])
             scale = prod(!rdom.staggered[d] ? inv(dx[d]) : dx[d] for d in 1:D)
 
@@ -643,27 +643,27 @@ function star(::Val{R}, ::Val{Dual},
         end
     end
 
-    FOp{D, D-R, !Dual, R, Dual, T, T}(rcomps)
+    FOp{D,D - R,!Dual,R,Dual,T,T}(rcomps)
 end
 
 
 
 export deriv
 
-function deriv(form::Form{D,R,Dual,T,U})::Form{D,R+1,Dual,T,U} where
-        {D, R, Dual, T<:Number, U}
+function deriv(form::Form{D,R,Dual,T,U})::Form{D,R + 1,Dual,T,U} where
+        {D,R,Dual,T <: Number,U}
     @assert D >= 0
     @assert 0 <= R <= D
     @assert R + 1 <= D
 
-    idict = Dict{Vec{R+1,Int}, Fun{D,T,U}}()
+    idict = Dict{Vec{R + 1,Int},Fun{D,T,U}}()
     icount = 0
-    for (j,fj) in form.comps
+    for (j, fj) in form.comps
         for dir in 1:D
             if !fj.dom.staggered[dir]
                 c = count(dir .> j)
                 s = bitsign(c)
-                i = Vec{R+1,Int}(Tuple(sort([dir, j...])))
+                i = Vec{R + 1,Int}(Tuple(sort([dir, j...])))
                 dfj = s * diff(fj, dir)
                 prev = get(idict, i, missing)
                 idict[i] = prev === missing ? dfj : prev + dfj
@@ -676,16 +676,16 @@ function deriv(form::Form{D,R,Dual,T,U})::Form{D,R+1,Dual,T,U} where
 end
 
 function deriv(::Val{R}, ::Val{Dual},
-               dom::Domain{D, T})::FOp{D, R+1, Dual, R, Dual, T, T} where
-        {R, Dual, D, T<:Number}
+               dom::Domain{D,T})::FOp{D,R + 1,Dual,R,Dual,T,T} where
+        {R,Dual,D,T <: Number}
     @assert D >= 0
     @assert 0 <= R <= D
     @assert R + 1 <= D
 
     dom = makedual(dom, Dual)
-    idict = Dict{Vec{R+1,Int}, Dict{Vec{R,Int}, Op{D,T,T}}}()
-    for staggeredc in CartesianIndices(ntuple(d -> 0:1, D))
-        staggered = Vec{D,Bool}(ntuple(d -> Bool(staggeredc[d]), D))
+    idict = Dict{Vec{R + 1,Int},Dict{Vec{R,Int},Op{D,T,T}}}()
+    for staggeredc in CartesianIndices(ntuple(d->0:1, D))
+        staggered = Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
         if count(staggered) == R
             j = Vec{R,Int}(Tuple(staggered2idx(staggered)))
             domj = makestaggered(dom, staggered)
@@ -693,10 +693,10 @@ function deriv(::Val{R}, ::Val{Dual},
                 if !domj.staggered[dir]
                     c = count(dir .> j)
                     s = bitsign(c)
-                    i = Vec{R+1,Int}(Tuple(sort([dir, j...])))
+                    i = Vec{R + 1,Int}(Tuple(sort([dir, j...])))
                     dfj = s * diff(domj, dir)
                     jdict = get!(idict, i) do
-                        Dict{Vec{R,Int}, Op{D,T,T}}()
+                        Dict{Vec{R,Int},Op{D,T,T}}()
                     end
                     @assert !haskey(jdict, j)
                     jdict[j] = dfj
@@ -704,14 +704,14 @@ function deriv(::Val{R}, ::Val{Dual},
             end
         end
     end
-    FOp{D, R+1, Dual, R, Dual, T, T}(idict)
+    FOp{D,R + 1,Dual,R,Dual,T,T}(idict)
 end
 
 
 
 export coderiv
-function coderiv(form::Form{D,R,Dual,T,U})::Form{D,R-1,Dual,T,U} where
-        {D, R, Dual, T<:Number, U}
+function coderiv(form::Form{D,R,Dual,T,U})::Form{D,R - 1,Dual,T,U} where
+        {D,R,Dual,T <: Number,U}
     @assert D >= 0
     @assert 0 <= R <= D
     @assert R - 1 >= 0
@@ -719,13 +719,13 @@ function coderiv(form::Form{D,R,Dual,T,U})::Form{D,R-1,Dual,T,U} where
     star(deriv(star(form)))
 end
 function coderiv(::Val{R}, ::Val{Dual},
-                 dom::Domain{D, T})::FOp{D, R-1, Dual, R, Dual, T, T} where
-        {R, Dual, D, T<:Number}
+                 dom::Domain{D,T})::FOp{D,R - 1,Dual,R,Dual,T,T} where
+        {R,Dual,D,T <: Number}
     @assert D >= 0
     @assert 0 <= R <= D
     @assert R - 1 >= 0
-    (star(Val(D-R+1), Val(!Dual), dom) *
-     deriv(Val(D-R), Val(!Dual), dom) *
+    (star(Val(D - R + 1), Val(!Dual), dom) *
+     deriv(Val(D - R), Val(!Dual), dom) *
      star(Val(R), Val(Dual), dom))
 end
 
@@ -733,16 +733,16 @@ end
 
 export laplace
 function laplace(form::Form{D,R,Dual,T,U})::Form{D,R,Dual,T,U} where
-        {D, R, Dual, T<:Number, U}
+        {D,R,Dual,T <: Number,U}
     @assert R == 0              # TODO: Add deriv ∘ coderiv
     # TODO: Improve performance
     coderiv(deriv(form))
 end
 function laplace(::Val{R}, ::Val{Dual},
-                 dom::Domain{D, T})::FOp{D, R, Dual, R, Dual, T, T} where
-        {R, Dual, D, T<:Number}
+                 dom::Domain{D,T})::FOp{D,R,Dual,R,Dual,T,T} where
+        {R,Dual,D,T <: Number}
     @assert R == 0
-    (coderiv(Val(R+1), Val(Dual), dom) *
+    (coderiv(Val(R + 1), Val(Dual), dom) *
      deriv(Val(R), Val(Dual), dom))
 end
 
@@ -750,8 +750,8 @@ end
 
 export boundary
 function boundary(::Val{0}, ::Val{false},
-                  dom::Domain{D, T})::FOp{D, 0, false, 0, false, T, T} where
-        {D, T<:Number}
+                  dom::Domain{D,T})::FOp{D,0,false,0,false,T,T} where
+        {D,T <: Number}
     n = dom.n
 
     str = strides(n)
@@ -776,10 +776,10 @@ function boundary(::Val{0}, ::Val{false},
         end
     end
     mat = sparse(I, J, V, len, len)
-    comp00 = Op{D, T, T}(dom, dom, mat)
+    comp00 = Op{D,T,T}(dom, dom, mat)
 
     comps = Dict(Vec{0,Int}(()) => Dict(Vec{0,Int}(()) => comp00))
-    FOp{D, 0, false, 0, false, T, T}(comps)
+    FOp{D,0,false,0,false,T,T}(comps)
 end
 
 export dirichlet
@@ -789,7 +789,7 @@ function Ops.mix_op_bc(bnd::FOp{D,R,Dual,R,Dual,T,U},
                        iop::FOp{D,R,Dual,R,Dual,T,U},
                        bop::FOp{D,R,Dual,R,Dual,T,U},
                        dom::Domain{D,T})::FOp{D,R,Dual,R,Dual,T,U} where
-        {D, R, Dual, T, U}
+        {D,R,Dual,T,U}
     id = one(typeof(bnd), dom)
     int = id - bnd
     int * iop + bnd * bop
@@ -797,7 +797,7 @@ end
 function Ops.mix_op_bc(bnd::FOp{D,R,Dual,R,Dual,T,U},
                        rhs::Form{D,R,Dual,T,U},
                        bvals::Form{D,R,Dual,T,U})::Form{D,R,Dual,T,U} where
-        {D, R, Dual, T, U}
+        {D,R,Dual,T,U}
     dom = rhs.dom
     @assert bvals.dom == dom
 
@@ -809,9 +809,8 @@ end
 
 
 export solve_dAlembert_Dirichlet
-function solve_dAlembert_Dirichlet(
-        pot::Form{D,0,false,T,U},
-        bvals::Form{D,0,false,T,U})::Form{D,0,false,T,U} where {D, T<:Number, U}
+function solve_dAlembert_Dirichlet(pot::Form{D,0,false,T,U},
+        bvals::Form{D,0,false,T,U})::Form{D,0,false,T,U} where {D,T <: Number,U}
     dom = pot.dom
     @assert bvals.dom == dom
 
@@ -819,7 +818,7 @@ function solve_dAlembert_Dirichlet(
     dx = spacing(dom)
     dx2 = dx .* dx
 
-    di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D-1)), D-1)
+    di = ntuple(dir->CartesianIndex(ntuple(d->d == dir, D - 1)), D - 1)
 
     pc = pot[()].coeffs
     bc = bvals[()].coeffs
@@ -828,46 +827,46 @@ function solve_dAlembert_Dirichlet(
         # Initial conditions
         sol[:,1] = bc[:,1]
         sol[:,2] = bc[:,2]
-        for j=3:n[2]
+        for j = 3:n[2]
             # Boundary conditions
             sol[1,j] = bc[1,j]
             sol[end,j] = bc[end,j]
             # Wave equation
-            for i in CartesianIndices(ntuple(d -> 2:n[d]-1, D-1))
-                lsol = (+ (+ sol[i-di[1],j-1]
-                           - 2*sol[i,j-1]
-                           + sol[i+di[1],j-1]) / dx2[1])
-                sol[i,j] = (- sol[i,j-2] + 2*sol[i,j-1]
-                            + dx2[2] * (lsol - pc[i,j-1]))
+            for i in CartesianIndices(ntuple(d->2:n[d] - 1, D - 1))
+                lsol = (+ (+ sol[i - di[1],j - 1]
+                           - 2 * sol[i,j - 1]
+                           + sol[i + di[1],j - 1]) / dx2[1])
+                sol[i,j] = (- sol[i,j - 2] + 2 * sol[i,j - 1]
+                            + dx2[2] * (lsol - pc[i,j - 1]))
             end
         end
     elseif D == 3
         # Initial conditions
         sol[:,:,1] = bc[:,:,1]
         sol[:,:,2] = bc[:,:,2]
-        for j=3:n[3]
+        for j = 3:n[3]
             # Boundary conditions
             sol[1,:,j] = bc[1,:,j]
             sol[end,:,j] = bc[end,:,j]
             sol[:,1,j] = bc[:,1,j]
             sol[:,end,j] = bc[:,end,j]
             # Wave equation
-            for i in CartesianIndices(ntuple(d -> 2:n[d]-1, D-1))
-                lsol = (+ (+ sol[i-di[1],j-1]
-                           - 2*sol[i,j-1]
-                           + sol[i+di[1],j-1]) / dx2[1]
-                        + (+ sol[i-di[2],j-1]
-                           - 2*sol[i,j-1]
-                           + sol[i+di[2],j-1]) / dx2[2])
-                sol[i,j] = (- sol[i,j-2] + 2*sol[i,j-1]
-                            + dx2[3] * (lsol - pc[i,j-1]))
+            for i in CartesianIndices(ntuple(d->2:n[d] - 1, D - 1))
+                lsol = (+ (+ sol[i - di[1],j - 1]
+                           - 2 * sol[i,j - 1]
+                           + sol[i + di[1],j - 1]) / dx2[1]
+                        + (+ sol[i - di[2],j - 1]
+                           - 2 * sol[i,j - 1]
+                           + sol[i + di[2],j - 1]) / dx2[2])
+                sol[i,j] = (- sol[i,j - 2] + 2 * sol[i,j - 1]
+                            + dx2[3] * (lsol - pc[i,j - 1]))
             end
         end
     elseif D == 4
         # Initial conditions
         sol[:,:,:,1] = bc[:,:,:,1]
         sol[:,:,:,2] = bc[:,:,:,2]
-        for j=3:n[4]
+        for j = 3:n[4]
             # Boundary conditions
             sol[1,:,:,j] = bc[1,:,:,j]
             sol[end,:,:,j] = bc[end,:,:,j]
@@ -876,18 +875,18 @@ function solve_dAlembert_Dirichlet(
             sol[:,:,1,j] = bc[:,:,1,j]
             sol[:,:,end,j] = bc[:,:,end,j]
             # Wave equation
-            for i in CartesianIndices(ntuple(d -> 2:n[d]-1, D-1))
-                lsol = (+ (+ sol[i-di[1],j-1]
-                           - 2*sol[i,j-1]
-                           + sol[i+di[1],j-1]) / dx2[1]
-                        + (+ sol[i-di[2],j-1]
-                           - 2*sol[i,j-1]
-                           + sol[i+di[2],j-1]) / dx2[2]
-                        + (+ sol[i-di[3],j-1]
-                           - 2*sol[i,j-1]
-                           + sol[i+di[3],j-1]) / dx2[3])
-                sol[i,j] = (- sol[i,j-2] + 2*sol[i,j-1]
-                            + dx2[4] * (lsol - pc[i,j-1]))
+            for i in CartesianIndices(ntuple(d->2:n[d] - 1, D - 1))
+                lsol = (+ (+ sol[i - di[1],j - 1]
+                           - 2 * sol[i,j - 1]
+                           + sol[i + di[1],j - 1]) / dx2[1]
+                        + (+ sol[i - di[2],j - 1]
+                           - 2 * sol[i,j - 1]
+                           + sol[i + di[2],j - 1]) / dx2[2]
+                        + (+ sol[i - di[3],j - 1]
+                           - 2 * sol[i,j - 1]
+                           + sol[i + di[3],j - 1]) / dx2[3])
+                sol[i,j] = (- sol[i,j - 2] + 2 * sol[i,j - 1]
+                            + dx2[4] * (lsol - pc[i,j - 1]))
             end
         end
     else
@@ -1157,8 +1156,8 @@ end
 
 export laplace1
 function laplace1(form::Form{D,R,T,U})::Form{D,R,T,U} where
-        {D, R, T<:Number, U}
-    di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
+        {D,R,T <: Number,U}
+    di = ntuple(dir->CartesianIndex(ntuple(d->d == dir, D)), D)
     dx = spacing(form.dom)
 
     if R == 0
@@ -1169,8 +1168,7 @@ function laplace1(form::Form{D,R,T,U})::Form{D,R,T,U} where
         n = dom0.n
         for i in CartesianIndices(size(dcs0))
             if all(1 .< i.I .< n)
-                dcs0[i] = sum(
-                    (cs0[i - di[d]] - 2 * cs0[i] + cs0[i + di[d]]) / dx[d]^2
+                dcs0[i] = sum((cs0[i - di[d]] - 2 * cs0[i] + cs0[i + di[d]]) / dx[d]^2
                     for d in 1:D)
             else
                 dcs0[i] = 0
@@ -1183,12 +1181,12 @@ function laplace1(form::Form{D,R,T,U})::Form{D,R,T,U} where
 end
 
 function laplace1(::Val{R}, ::Val{Dual},
-                  dom::Domain{D,T})::FOp{D, R, Dual, R, Dual, T, T} where
-        {D, R, Dual, T<:Number}
+                  dom::Domain{D,T})::FOp{D,R,Dual,R,Dual,T,T} where
+        {D,R,Dual,T <: Number}
     @assert R == 0
     @assert !Dual
     n = dom.n
-    di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
+    di = ntuple(dir->CartesianIndex(ntuple(d->d == dir, D)), D)
     dx = spacing(dom)
     dx2 = dx .* dx
 
@@ -1199,7 +1197,7 @@ function laplace1(::Val{R}, ::Val{Dual},
     I = Int[]
     J = Int[]
     V = T[]
-    maxsize = 3*D * len
+    maxsize = 3 * D * len
     sizehint!(I, maxsize)
     sizehint!(J, maxsize)
     sizehint!(V, maxsize)
@@ -1220,7 +1218,7 @@ function laplace1(::Val{R}, ::Val{Dual},
         end
     end
     mat = sparse(I, J, V, len, len)
-    FOp{D, R, Dual, R, Dual, T, T}(Dict(Vec{0,Int}(()) =>
+    FOp{D,R,Dual,R,Dual,T,T}(Dict(Vec{0,Int}(()) =>
                                         Dict(Vec{0,Int}(()) =>
                                         Op{D,T,T}(dom, dom, mat))))
 end

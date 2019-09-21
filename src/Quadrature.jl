@@ -22,24 +22,24 @@ function antisymmetrize(xs::Vector{T})::Vector{T} where {T}
     (xs - reverse(xs)) ./ 2
 end
 
-function makequad(::Type{T}, n::Int)::Quad{T} where {T<:AbstractFloat}
+function makequad(::Type{T}, n::Int)::Quad{T} where {T <: AbstractFloat}
     @assert n > 0
     half = T(1) / 2
     # Choose points according to cos pi (i/n)
-    xs = T[cospi((n - i - half) / n) for i in 0:n-1]
+    xs = T[cospi((n - i - half) / n) for i in 0:n - 1]
     xs = antisymmetrize(xs)
     @assert all(-1 .< xs .< 1)
     # Choose weights so that Chebyshev polynomials are exact
     chebvals = Array{T}(undef, n, n)
     chebints = Array{T}(undef, n)
-    for i in 0:n-1
-        chebints[1+i] = isodd(i) ? 0 : T(1) / (1 - i^2)
-        for j in 0:n-1
+    for i in 0:n - 1
+        chebints[1 + i] = isodd(i) ? 0 : T(1) / (1 - i^2)
+        for j in 0:n - 1
             # x = xs[1+j]
             # chebvals[1+i, 1+j] = cos(i * acos(x))
             # chebvals[1+i, 1+j] = cos(i * acos(xs[1+j]))
             # acos(x) = pi * (n - j - half) / n
-            chebvals[1+i, 1+j] = cospi(i * (n - j - half) / n)
+            chebvals[1 + i, 1 + j] = cospi(i * (n - j - half) / n)
         end
     end
     ws = chebvals \ chebints
@@ -47,21 +47,21 @@ function makequad(::Type{T}, n::Int)::Quad{T} where {T<:AbstractFloat}
     Quad{T}(xs, ws)
 end
 
-function makequad(::Type{T}, n::Int)::Quad{T} where {T<:Rational}
+function makequad(::Type{T}, n::Int)::Quad{T} where {T <: Rational}
     @assert n > 0
     # Choose points according to cos pi (i/n)
     I = typeof(T(0).num)
-    cospi1(x) = rationalize(I, cospi(x); tol=1/n^4)::T
-    xs = T[cospi1((n - i - 1/2) / n) for i in 0:n-1]
+    cospi1(x) = rationalize(I, cospi(x); tol = 1 / n^4)::T
+    xs = T[cospi1((n - i - 1 / 2) / n) for i in 0:n - 1]
     xs = antisymmetrize(xs)
     @assert all(-1 .< xs .< 1)
     # Choose weights so that polynomials x^i are exact
     polyvals = Array{T}(undef, n, n)
     polyints = Array{T}(undef, n)
-    for i in 0:n-1
-        polyints[1+i] = isodd(i) ? 0 : 1//(i+1)
-        for j in 0:n-1
-            polyvals[1+i, 1+j] = xs[1+j]^i
+    for i in 0:n - 1
+        polyints[1 + i] = isodd(i) ? 0 : 1 // (i + 1)
+        for j in 0:n - 1
+            polyvals[1 + i, 1 + j] = xs[1 + j]^i
         end
     end
     ws = polyvals \ polyints
@@ -71,7 +71,7 @@ end
 
 
 
-const quads = Dict{Tuple{Type,Int}, Quad}()
+const quads = Dict{Tuple{Type,Int},Quad}()
 
 function getquad(::Type{T}, n::Int)::Quad{T} where {T}
     q = get(quads, (T, n), nothing)
@@ -89,7 +89,7 @@ end
 export quad
 
 @generated function quad(f, ::Type{U}, xmin::NTuple{D,T}, xmax::NTuple{D,T},
-                         n::NTuple{D,Int})::U where {D, T, U}
+                         n::NTuple{D,Int})::U where {D,T,U}
     quote
         q = tuple($([:(getquad(T, n[$d])) for d in 1:D]...))
         s = zero(U)

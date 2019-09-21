@@ -5,21 +5,21 @@ using Memoize
 
 
 @memoize Dict function ldom(D::Int)::Domain
-    Domain{D, Float64}(9, lorentzian=true)
+    Domain{D,Float64}(9, lorentzian = true)
 end
 
 
 
 @generated function waveD(x::Vec{D,T})::T where {D,T}
     quote
-        k = tuple($([d<D ? :(T(1)) : :(sqrt(T(D-1))) for d in 1:D]...))
+        k = tuple($([d < D ? :(T(1)) : :(sqrt(T(D - 1))) for d in 1:D]...))
         *($([:(sinpi(k[$d] * x[$d])) for d in 1:D]...))
     end
 end
 
-@generated function epsD(x::Vec{D,T})::T where {D, T}
+@generated function epsD(x::Vec{D,T})::T where {D,T}
     quote
-        k = tuple($([d<D ? :(T(1)) : :(sqrt(T(D-1))) for d in 1:D]...))
+        k = tuple($([d < D ? :(T(1)) : :(sqrt(T(D - 1))) for d in 1:D]...))
         dphi = tuple($([
             :(*($([d == dir ?
                    :(pi * k[$d] * cospi(k[$d] * x[$d])) :

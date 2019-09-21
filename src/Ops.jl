@@ -35,26 +35,26 @@ end
 
 # Fun is a collection
 
-function Base.eltype(::Type{Op{D,T,U}})::Type where {D, T, U}
+function Base.eltype(::Type{Op{D,T,U}})::Type where {D,T,U}
     U
 end
-function Base.length(A::Op{D,T,U})::Int where {D, T, U}
+function Base.length(A::Op{D,T,U})::Int where {D,T,U}
     length(A.mat)
 end
-function Base.ndims(A::Op{D,T,U})::Int where {D, T, U}
+function Base.ndims(A::Op{D,T,U})::Int where {D,T,U}
     ndims(A.mat)
 end
-function Base.size(A::Op{D,T,U})::NTuple{2,Int} where {D, T, U}
+function Base.size(A::Op{D,T,U})::NTuple{2,Int} where {D,T,U}
     size(A.mat)
 end
-function Base.size(A::Op{D,T,U}, d)::Int where {D, T, U}
+function Base.size(A::Op{D,T,U}, d)::Int where {D,T,U}
     size(A.mat, d)
 end
 
-function Base.getindex(A::Op{D,T,U}, i::Vec{D,Int})::U where {D, T, U}
+function Base.getindex(A::Op{D,T,U}, i::Vec{D,Int})::U where {D,T,U}
     getindex(A.mat, i.elts)
 end
-function Base.getindex(A::Op{D,T,U}, is...)::U where {D, T, U}
+function Base.getindex(A::Op{D,T,U}, is...)::U where {D,T,U}
     getindex(A.mat, is...)
 end
 
@@ -64,52 +64,52 @@ end
 
 function Base.zeros(::Type{Op{D,T,U}},
                     domi::Domain{D,T}, domj::Domain{D,T})::Op{D,T,U} where
-        {D, T<:Number, U}
+        {D,T <: Number,U}
     leni = prod(domi.n)
     lenj = prod(domj.n)
     mat = spzeros(U, leni, lenj)
     Op{D,T,U}(domi, domj, mat)
 end
 
-function Base.:+(A::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U}
+function Base.:+(A::Op{D,T,U})::Op{D,T,U} where {D,T <: Number,U}
     Op{D,T,U}(A.domi, A.domj, +A.mat)
 end
-function Base.:-(A::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U}
+function Base.:-(A::Op{D,T,U})::Op{D,T,U} where {D,T <: Number,U}
     Op{D,T,U}(A.domi, A.domj, -A.mat)
 end
 
-function Base.:+(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U}
+function Base.:+(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where {D,T <: Number,U}
     @assert A.domi == B.domi && A.domj == B.domj
     Op{D,T,U}(A.domi, A.domj, A.mat + B.mat)
 end
-function Base.:-(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U}
+function Base.:-(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where {D,T <: Number,U}
     @assert A.domi == B.domi && A.domj == B.domj
     Op{D,T,U}(A.domi, A.domj, A.mat - B.mat)
 end
 
-function Base.:*(a::Number, A::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U}
+function Base.:*(a::Number, A::Op{D,T,U})::Op{D,T,U} where {D,T <: Number,U}
     Op{D,T,U}(A.domi, A.domj, U(a) * A.mat)
 end
-function Base.:*(A::Op{D,T,U}, a::Number)::Op{D,T,U} where {D, T<:Number, U}
+function Base.:*(A::Op{D,T,U}, a::Number)::Op{D,T,U} where {D,T <: Number,U}
     Op{D,T,U}(A.domi, A.domj, A.mat * U(a))
 end
-function Base.:\(a::Number, A::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U}
+function Base.:\(a::Number, A::Op{D,T,U})::Op{D,T,U} where {D,T <: Number,U}
     Op{D,T,U}(A.domi, A.domj, U(a) \ A.mat)
 end
-function Base.:/(A::Op{D,T,U}, a::Number)::Op{D,T,U} where {D, T<:Number, U}
+function Base.:/(A::Op{D,T,U}, a::Number)::Op{D,T,U} where {D,T <: Number,U}
     Op{D,T,U}(A.domi, A.domj, A.mat / U(a))
 end
 
-function Base.iszero(A::Op{D,T,U})::Bool where {D, T<:Number, U}
+function Base.iszero(A::Op{D,T,U})::Bool where {D,T <: Number,U}
     iszero(A.mat)
 end
-function Base.:(==)(A::Op{D,T,U}, B::Op{D,T,U})::Bool where {D, T<:Number, U}
+function Base.:(==)(A::Op{D,T,U}, B::Op{D,T,U})::Bool where {D,T <: Number,U}
     iszero(A - B)
 end
 
 
 
-function Base.:*(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where {D, T<:Number, U}
+function Base.:*(A::Op{D,T,U}, B::Op{D,T,U})::Op{D,T,U} where {D,T <: Number,U}
     @assert A.domj == B.domi
     Op{D,T,U}(A.domi, B.domj, A.mat * B.mat)
 end
@@ -118,12 +118,12 @@ end
 
 function Base.zero(::Type{Op{D,T,U}},
                    domi::Domain{D,T}, domj::Domain{D,T})::Op{D,T,U} where
-        {D, T, U}
+        {D,T,U}
     zeros(Op{D,T,U}, domi, domj)
 end
 function Base.one(::Type{Op{D,T,U}},
                   domi::Domain{D,T}, domj::Domain{D,T})::Op{D,T,U} where
-        {D, T, U}
+        {D,T,U}
     ni = domi.n
     stri = strides(ni)
     leni = prod(ni)
@@ -152,7 +152,7 @@ function Base.one(::Type{Op{D,T,U}},
     Op{D,T,U}(domi, domj, mat)
 end
 
-function Base.:*(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where {D, T, U}
+function Base.:*(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where {D,T,U}
     @assert op.domj == rhs.dom
 
     res = reshape(op.mat * reshape(rhs.coeffs, :), op.domi.n.elts)
@@ -168,11 +168,11 @@ end
 #     Fun{D,T,U}(dom, res)
 # end
 
-function Base.:\(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where {D, T, U}
+function Base.:\(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where {D,T,U}
     @assert op.domi == rhs.dom
 
     M = op.mat
-    if T <: Union{BigFloat, Rational}
+    if T <: Union{BigFloat,Rational}
         @info "Converting sparse to full matrix..."
         M = Matrix(M)
     else
@@ -202,7 +202,7 @@ end
 export mix_op_bc
 function mix_op_bc(bnd::Op{D,T,U},
                    iop::Op{D,T,U}, bop::Op{D,T,U})::Op{D,T,U} where
-        {D, T<:Number, U}
+        {D,T <: Number,U}
     domi = bnd.domi
     domj = bnd.domj
     @assert iop.domi == domi && iop.domj == domj
@@ -214,7 +214,7 @@ function mix_op_bc(bnd::Op{D,T,U},
 end
 function mix_op_bc(bnd::Op{D,T,U},
                    rhs::Fun{D,T,U}, bvals::Fun{D,T,U})::Fun{D,T,U} where
-        {D, T<:Number, U}
+        {D,T <: Number,U}
     domi = bnd.domi
     domj = bnd.domj
     @assert rhs.domi == domi && rhs.domj == domj

@@ -33,11 +33,11 @@ include("Forms.jl")
 
 export boundaryIV
 function boundaryIV(::Type{U}, dom::Domain{D,T})::Op{D,T,U} where
-        {D, T<:Number, U<:Number}
+        {D,T <: Number,U <: Number}
     @assert !any(dom.staggered) # TODO
     n = dom.n
 
-    str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
+    str = Vec{D,Int}(ntuple(dir->dir == 1 ? 1 : prod(n[d] for d in 1:dir - 1), D))
     len = prod(n)
     idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
 
@@ -73,12 +73,12 @@ const dirichletIV = boundaryIV
 
 export dAlembert
 function dAlembert(::Type{U}, dom::Domain{D,T})::Op{D,T,U} where
-        {D, T<:Number, U<:Number}
+        {D,T <: Number,U <: Number}
     @assert !any(dom.staggered) # TODO
     n = dom.n
-    dx2 = Vec(ntuple(d -> ((dom.xmax[d] - dom.xmin[d]) / (n[d] - 1)) ^ 2, D))
+    dx2 = Vec(ntuple(d->((dom.xmax[d] - dom.xmin[d]) / (n[d] - 1))^2, D))
 
-    str = Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
+    str = Vec{D,Int}(ntuple(dir->dir == 1 ? 1 : prod(n[d] for d in 1:dir - 1), D))
     len = prod(n)
     idx(i::Vec{D,Int}) = 1 + sum(i[d] * str[d] for d in 1:D)
 
@@ -96,7 +96,7 @@ function dAlembert(::Type{U}, dom::Domain{D,T})::Op{D,T,U} where
         i = Vec(ic.I) .- 1
         for dir in 1:D
             s = bitsign(dir == D)
-            di = Vec(ntuple(d -> d==dir ? 1 : 0, D))
+            di = Vec(ntuple(d->d == dir ? 1 : 0, D))
             if dir < D
                 if i[dir] == 0
                     j = i + di
@@ -135,15 +135,15 @@ function deriv0(u0::Fun{D,T,U})::NTuple{D,Fun{D,T,U}} where {D,T,U}
         dom0 = u0.dom
         s0 = dom0.staggered
         n0 = dom0.n
-        di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
-        dx = ntuple(d -> (dom0.xmax[d] - dom0.xmin[d]) / (n0[d] - 1), D)
+        di = ntuple(dir->CartesianIndex(ntuple(d->d == dir, D)), D)
+        dx = ntuple(d->(dom0.xmax[d] - dom0.xmin[d]) / (n0[d] - 1), D)
         @assert s0 == Vec((false, false))
         s1x = Vec((true, false))
         s1t = Vec((false, true))
-        n1x = Vec((n0[1]-s1x[1], n0[2]-s1x[2]))
-        n1t = Vec((n0[1]-s1t[1], n0[2]-s1t[2]))
-        dom1x = Domain{D, T}(s1x, dom0.metric, n1x, dom0.xmin, dom0.xmax)
-        dom1t = Domain{D, T}(s1t, dom0.metric, n1t, dom0.xmin, dom0.xmax)
+        n1x = Vec((n0[1] - s1x[1], n0[2] - s1x[2]))
+        n1t = Vec((n0[1] - s1t[1], n0[2] - s1t[2]))
+        dom1x = Domain{D,T}(s1x, dom0.metric, n1x, dom0.xmin, dom0.xmax)
+        dom1t = Domain{D,T}(s1t, dom0.metric, n1t, dom0.xmin, dom0.xmax)
         cs0 = u0.coeffs
         dcs1x = Array{U}(undef, n1x.elts)
         for i in CartesianIndices(size(dcs1x))
@@ -160,8 +160,8 @@ function deriv0(u0::Fun{D,T,U})::NTuple{D,Fun{D,T,U}} where {D,T,U}
 end
 
 # Wedge of two 1-forms
-function wedge11(u1::NTuple{D, Fun{D,T,U}},
-                 v1::NTuple{D, Fun{D,T,U}})::Fun{D,T,U} where {D,T,U}
+function wedge11(u1::NTuple{D,Fun{D,T,U}},
+                 v1::NTuple{D,Fun{D,T,U}})::Fun{D,T,U} where {D,T,U}
     if D == 2
         u1x, u1t = u1
         v1x, v1t = v1
@@ -179,7 +179,7 @@ function wedge11(u1::NTuple{D, Fun{D,T,U}},
                                   n[2] - v1x.dom.staggered[2]))
         @assert v1t.dom.n == Vec((n[1] - v1t.dom.staggered[1],
                                   n[2] - v1t.dom.staggered[2]))
-        di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D)), D)
+        di = ntuple(dir->CartesianIndex(ntuple(d->d == dir, D)), D)
         ucs1x = u1x.coeffs
         ucs1t = u1t.coeffs
         vcs1x = u1x.coeffs
@@ -190,13 +190,13 @@ function wedge11(u1::NTuple{D, Fun{D,T,U}},
         wcs2 = Array{U}(undef, n2.elts)
         for i in CartesianIndices(size(wcs2))
             wcs2[i] = (+ (+ ucs1t[i] * vcs1x[i]
-                          + ucs1t[i+di[1]] * vcs1x[i]
-                          + ucs1t[i+di[1]] * vcs1x[i+di[2]]
-                          + ucs1t[i] * vcs1x[i+di[2]])
+                          + ucs1t[i + di[1]] * vcs1x[i]
+                          + ucs1t[i + di[1]] * vcs1x[i + di[2]]
+                          + ucs1t[i] * vcs1x[i + di[2]])
                        - (+ ucs1x[i] * vcs1t[i]
-                          + ucs1x[i+di[2]] * vcs1t[i]
-                          + ucs1x[i+di[2]] * vcs1t[i+di[1]]
-                          + ucs1x[i] * vcs1t[i+di[1]])) / 8
+                          + ucs1x[i + di[2]] * vcs1t[i]
+                          + ucs1x[i + di[2]] * vcs1t[i + di[1]]
+                          + ucs1x[i] * vcs1t[i + di[1]])) / 8
         end
         return Fun{D,T,U}(dom2, wcs2)
     else
@@ -211,7 +211,7 @@ end
 # Scalar wave equation
 
 export scalarwave_energy
-function scalarwave_energy(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T<:Number}
+function scalarwave_energy(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T <: Number}
     @assert all(!phi.dom.staggered)
 
     dphi = deriv0(phi)
@@ -221,13 +221,13 @@ function scalarwave_energy(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T<:Number}
     eps
 end
 
-function scalarwave_energy1(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T<:Number}
+function scalarwave_energy1(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T <: Number}
     @assert all(!phi.dom.staggered)
     sdom = makestaggered(phi.dom)
 
     n = sdom.n
-    dx = Vec(ntuple(d -> (sdom.xmax[d] - sdom.xmin[d]) / n[d], D))
-    di = ntuple(dir -> Vec(ntuple(d -> Int(d==dir), D)), D)
+    dx = Vec(ntuple(d->(sdom.xmax[d] - sdom.xmin[d]) / n[d], D))
+    di = ntuple(dir->Vec(ntuple(d->Int(d == dir), D)), D)
 
     eps = Array{T}(undef, n.elts)
     if D == 4
@@ -236,31 +236,31 @@ function scalarwave_energy1(phi::Fun{D,T,T})::Fun{D,T,T} where {D,T<:Number}
             s = T(0)
             # x
             for c in 0:1, b in 0:1, a in 0:1
-                im = i +         a*di[2] + b*di[3] + c*di[4];
-                ip = i + di[1] + a*di[2] + b*di[3] + c*di[4];
+                im = i +         a * di[2] + b * di[3] + c * di[4];
+                ip = i + di[1] + a * di[2] + b * di[3] + c * di[4];
                 s += ((+ phi.coeffs[CartesianIndex(ip.elts)]
-                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[1]) ^2 / 8
+                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[1])^2 / 8
             end
             # y
             for c in 0:1, b in 0:1, a in 0:1
-                im = i +         a*di[1] + b*di[3] + c*di[4];
-                ip = i + di[2] + a*di[1] + b*di[3] + c*di[4];
+                im = i +         a * di[1] + b * di[3] + c * di[4];
+                ip = i + di[2] + a * di[1] + b * di[3] + c * di[4];
                 s += ((+ phi.coeffs[CartesianIndex(ip.elts)]
-                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[2]) ^2 / 8
+                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[2])^2 / 8
             end
             # z
             for c in 0:1, b in 0:1, a in 0:1
-                im = i +         a*di[1] + b*di[2] + c*di[4];
-                ip = i + di[3] + a*di[1] + b*di[2] + c*di[4];
+                im = i +         a * di[1] + b * di[2] + c * di[4];
+                ip = i + di[3] + a * di[1] + b * di[2] + c * di[4];
                 s += ((+ phi.coeffs[CartesianIndex(ip.elts)]
-                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[3]) ^2 / 8
+                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[3])^2 / 8
             end
             # t
             for c in 0:1, b in 0:1, a in 0:1
-                im = i +         a*di[1] + b*di[2] + c*di[3];
-                ip = i + di[4] + a*di[1] + b*di[2] + c*di[3];
+                im = i +         a * di[1] + b * di[2] + c * di[3];
+                ip = i + di[4] + a * di[1] + b * di[2] + c * di[3];
                 s += ((+ phi.coeffs[CartesianIndex(ip.elts)]
-                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[4]) ^2 / 8
+                       - phi.coeffs[CartesianIndex(im.elts)]) / dx[4])^2 / 8
             end
             eps[ic] = s / 2
         end
@@ -387,9 +387,9 @@ function particle_acceleration(p::Particle{D,T},
 
     rho = particle_density(p)
 
-    grad_pot = ntuple(d -> deriv(pot, d), D)
+    grad_pot = ntuple(d->deriv(pot, d), D)
 
-    acc = ntuple(d -> sum(rho .* grad_pot[d]), D)
+    acc = ntuple(d->sum(rho .* grad_pot[d]), D)
     Vec{D,T}(acc)
 end
 

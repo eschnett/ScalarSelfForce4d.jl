@@ -8,12 +8,12 @@ using Memoize
 @generated function dsinpiD(x::Vec{D,T}, dir::Int)::T where {D,T}
     quote
         $([quote
-               if dir == $dir1
-                   return *($([d == dir1 ?
+            if dir == $dir1
+                return *($([d == dir1 ?
                                :(pi * cospi(x[$d])) :
                                :(sinpi(x[$d])) for d in 1:D]...))
-               end
-           end
+            end
+        end
            for dir1 in 1:D]...)
         T(0)
     end
@@ -50,10 +50,10 @@ function testForms()
                 as = [BigRat(rand(-100:100)) for i in 1:10]
                 xs = Form{D,R,Dual,BigRat,BigRat}[]
                 for i in 1:10
-                    comps = Dict{Vec{R,Int}, Fun{D,BigRat,BigRat}}()
-                    for staggeredc in CartesianIndices(ntuple(d -> 0:1, D))
+                    comps = Dict{Vec{R,Int},Fun{D,BigRat,BigRat}}()
+                    for staggeredc in CartesianIndices(ntuple(d->0:1, D))
                         staggered =
-                            Vec{D,Bool}(ntuple(d -> Bool(staggeredc[d]), D))
+                            Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
                         if count(staggered) == R
                             idx = Vec{R,Int}(Tuple(staggered2idx(staggered)))
                             fdom = makestaggered(makedual(dom, Dual), staggered)
@@ -73,7 +73,7 @@ function testForms()
     for D in 1:3, lorentzian in false:true
         for RI in 0:D, DualI in false:true
             for RJ in 0:D, DualJ in false:true
-                dom = Domain{D,BigRat}(3, lorentzian=lorentzian)
+                dom = Domain{D,BigRat}(3, lorentzian = lorentzian)
                 z = zeros(FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat})
                 xs = FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat}[]
                 if RI == RJ && DualI == DualJ
@@ -166,10 +166,10 @@ function testForms()
         sssfsinpiD = star(ssfsinpiD)
         scale = bitsign(0 * (D - 0))
         maxerr = norm(fsinpi(D)[()] - scale * ssfsinpiD[()], Inf)
-        @test isapprox(maxerr, 0; atol=atol)
-        sidx = ntuple(d -> d, D)
+        @test isapprox(maxerr, 0; atol = atol)
+        sidx = ntuple(d->d, D)
         maxerr = norm(sfsinpiD[sidx] - scale * sssfsinpiD[sidx], Inf)
-        @test isapprox(maxerr, 0; atol=atol)
+        @test isapprox(maxerr, 0; atol = atol)
     
         sdfsinpiD = star(dfsinpi(D))
         ssdfsinpiD = star(sdfsinpiD)
@@ -177,15 +177,15 @@ function testForms()
         scale = bitsign(1 * (D - 1))
         for dir in 1:D
             maxerr = norm(dfsinpi(D)[(dir,)] - scale * ssdfsinpiD[(dir,)], Inf)
-            @test isapprox(maxerr, 0; atol=atol)
-            sidx = ntuple(d -> d < dir ? d : d + 1, D-1)
+            @test isapprox(maxerr, 0; atol = atol)
+            sidx = ntuple(d->d < dir ? d : d + 1, D - 1)
             maxerr = norm(sdfsinpiD[sidx] - scale * sssdfsinpiD[sidx], Inf)
-            @test isapprox(maxerr, 0; atol=atol)
+            @test isapprox(maxerr, 0; atol = atol)
         end
     end
 
     @testset "Forms.Derivatives D=$D" for D in 1:3
-        atol = (D<=3 ? 100 : 1000) * eps(1.0)
+        atol = (D <= 3 ? 100 : 1000) * eps(1.0)
 
         # Constants have zero derivative
         ac = approximate(x->1.0, dom(D))
@@ -193,7 +193,7 @@ function testForms()
         dfac = deriv(fac)
         for dir in 1:D
             err = maxabsdiff(dom(D), x->0.0, dfac[(dir,)])
-            @test isapprox(err, 0; atol=atol)
+            @test isapprox(err, 0; atol = atol)
         end
 
         # Linear functions have unit derivative
@@ -202,8 +202,8 @@ function testForms()
             fax = Form(Dict(() => ax))
             dfax = deriv(fax)
             for d in 1:D
-                err = maxabsdiff(dom(D), x -> d==dir ? 1.0 : 0.0, dfax[(d,)])
-                @test isapprox(err, 0; atol=atol)
+                err = maxabsdiff(dom(D), x->d == dir ? 1.0 : 0.0, dfax[(d,)])
+                @test isapprox(err, 0; atol = atol)
             end
         end
 
@@ -213,26 +213,26 @@ function testForms()
         dfsinpi(D) = deriv(fsinpi(D))
         for dir in 1:D
             domDx = makestaggered(dom(D), unitvec(Val(D), dir))
-            adsinpix = approximate(x -> dsinpiD(x, dir), domDx)
+            adsinpix = approximate(x->dsinpiD(x, dir), domDx)
             err = norm(dfsinpi(D).comps[Vec((dir,))] - adsinpix, Inf)
             if D == 1
-                @test isapprox(err, 0.03683663404089432; atol=1.0e-6)
+                @test isapprox(err, 0.03683663404089432; atol = 1.0e-6)
             elseif D == 2
-                @test isapprox(err, 0.03879219734864847; atol=1.0e-6)
+                @test isapprox(err, 0.03879219734864847; atol = 1.0e-6)
             elseif D == 3
-                @test isapprox(err, 0.04085157654377347; atol=1.0e-6)
+                @test isapprox(err, 0.04085157654377347; atol = 1.0e-6)
             elseif D == 4
-                @test isapprox(err, 0.04302028294795979; atol=1.0e-6)
+                @test isapprox(err, 0.04302028294795979; atol = 1.0e-6)
             else
                 @assert false
             end
         end
         if D > 1
             ddfsinpi = deriv(dfsinpi(D))
-            for dir1 in 1:D, dir2 in dir1+1:D
-                idx12 = Vec{2,Int}((dir1,dir2))
+            for dir1 in 1:D, dir2 in dir1 + 1:D
+                idx12 = Vec{2,Int}((dir1, dir2))
                 maxerr = norm(ddfsinpi[idx12], Inf)
-                @test isapprox(maxerr, 0; atol=atol)
+                @test isapprox(maxerr, 0; atol = atol)
             end
         end
     end
@@ -246,36 +246,36 @@ function testForms()
         ad2sinpiD = approximate(lsinpiD, dom(D))
         err = norm(sdsdfsinpiD[()] - ad2sinpiD, Inf)
         if D == 1
-            @test isapprox(err, 0.6047119237688179; atol=1.0e-6)
+            @test isapprox(err, 0.6047119237688179; atol = 1.0e-6)
         elseif D == 2
-            @test isapprox(err, 0.9781685656156345; atol=1.0e-6)
+            @test isapprox(err, 0.9781685656156345; atol = 1.0e-6)
         elseif D == 3
-            @test isapprox(err, 1.5317929733380282; atol=1.0e-6)
+            @test isapprox(err, 1.5317929733380282; atol = 1.0e-6)
         elseif D == 4
-            @test isapprox(err, 2.150815960478276; atol=1.0e-6)
+            @test isapprox(err, 2.150815960478276; atol = 1.0e-6)
         else
             @assert false
         end
 
         cdfsinpiD = coderiv(dfsinpi(D))
         err = norm(cdfsinpiD[()] - sdsdfsinpiD[()], Inf)
-        @test isapprox(err, 0; atol=atol)
+        @test isapprox(err, 0; atol = atol)
 
         lfsinpiD = laplace(fsinpi(D))
         err = norm(lfsinpiD[()] - sdsdfsinpiD[()], Inf)
-        @test isapprox(err, 0; atol=atol)
+        @test isapprox(err, 0; atol = atol)
     end
 
     @testset "Forms.Operators D=$D lorentzian=$lorentzian" for D in 1:4,
             lorentzian in [false]   # false:true
         BigRat = Rational{BigInt}
-        dom = Domain{D, BigRat}(3, lorentzian=lorentzian)
+        dom = Domain{D,BigRat}(3, lorentzian = lorentzian)
         f = Form(Dict(() => Fun(dom, BigRat.(rand(-100:100, dom.n.elts)))))
 
         # Star
 
         idx0 = Vec{0,Int}(())
-        idxD = Vec{D,Int}(ntuple(d -> d, D))
+        idxD = Vec{D,Int}(ntuple(d->d, D))
 
         s0 = star(Val(0), Val(false), dom)
         sf = star(f)
@@ -303,18 +303,18 @@ function testForms()
         @test length(s1.comps) == D
         for dir in 1:D
             idx1 = Vec{1,Int}((dir,))
-            idxD1 = Vec{D-1,Int}(ntuple(d -> d<dir ? d : d+1, D-1))
+            idxD1 = Vec{D - 1,Int}(ntuple(d->d < dir ? d : d + 1, D - 1))
             @test haskey(s1.comps, idxD1)
             @test length(s1.comps[idxD1]) == 1
             @test haskey(s1.comps[idxD1], idx1)
             @test s1.comps[idxD1][idx1] * df[idx1] == sdf[idxD1]
         end
 
-        sD1 = star(Val(D-1), Val(true), makedual(dom, !dom.dual))
+        sD1 = star(Val(D - 1), Val(true), makedual(dom, !dom.dual))
         ssdf = star(sdf)
         for dir in 1:D
             idx1 = Vec{1,Int}((dir,))
-            idxD1 = Vec{D-1,Int}(ntuple(d -> d<dir ? d : d+1, D-1))
+            idxD1 = Vec{D - 1,Int}(ntuple(d->d < dir ? d : d + 1, D - 1))
             @test length(sD1.comps) == D
             @test haskey(sD1.comps, idx1)
             @test length(sD1.comps[idx1]) == 1
@@ -325,7 +325,7 @@ function testForms()
         s = bitsign(1 * (D - 1))
         for dir in 1:D
             idx1 = Vec{1,Int}((dir,))
-            idxD1 = Vec{D-1,Int}(ntuple(d -> d<dir ? d : d+1, D-1))
+            idxD1 = Vec{D - 1,Int}(ntuple(d->d < dir ? d : d + 1, D - 1))
             @test sD1.comps[idx1][idxD1] * s1.comps[idxD1][idx1] == s * I
         end
 
@@ -344,7 +344,7 @@ function testForms()
         if D > 1
             d1 = deriv(Val(1), Val(false), dom)
             d10 = d1 * d0
-            for (i,d10i) in d10.comps, (j,d10ij) in d10i
+            for (i, d10i) in d10.comps, (j, d10ij) in d10i
                 @test all(d10ij .== 0)
             end
         end

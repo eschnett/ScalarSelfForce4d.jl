@@ -5,7 +5,7 @@ using Memoize
 
 
 @memoize Dict function dom(D::Int)::Domain
-    Domain{D, Float64}(9)
+    Domain{D,Float64}(9)
 end
 @memoize Dict function sdom(D::Int)::Domain
     makestaggered(dom(D), trues(Vec{D,Bool}))
