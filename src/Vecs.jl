@@ -40,7 +40,7 @@ end
 
 # Vec is a collection
 
-function Base.eltype(x::Vec{D,T})::Type where {D, T}
+function Base.eltype(::Type{Vec{D,T}})::Type where {D, T}
     T
 end
 function Base.length(x::Vec{D,T})::Int where {D, T}
@@ -118,10 +118,10 @@ function Base.:-(x::Vec, y::Vec)::Vec
     -(promote(x, y)...)
 end
 
-function Base.:*(a::T, x::Vec{D,T})::Vec{D,T} where {D, T}
+function Base.:*(a::Number, x::Vec{D,T})::Vec{D,T} where {D, T}
     Vec{D,T}(T(a) .* x.elts)
 end
-function Base.:*(x::Vec{D,T}, a::T)::Vec{D,T} where {D, T}
+function Base.:*(x::Vec{D,T}, a::Number)::Vec{D,T} where {D, T}
     Vec{D,T}(x.elts .* T(a))
 end
 function Base.:\(a::Number, x::Vec{D,T})::Vec{D,T} where {D, T}
@@ -151,6 +151,10 @@ end
 function Base.broadcasted(op::ArithOp, a::Number, x::Vec{D,T})::Vec{D,T} where
         {D, T<:Number}
     Vec{D,T}(ntuple(d -> op(T(a), x.elts[d]), D))
+end
+
+function Base.iszero(x::Vec{D,T})::Bool where {D, T<:Number}
+    all(iszero.(x))
 end
 
 const CmpOp = Union{typeof(==), typeof(!=),
@@ -230,6 +234,12 @@ end
 
 function LinearAlgebra.norm(x::Vec{D,T}, p::Real=2) where {D, T<:Number}
     norm(x.elts, p)
+end
+
+
+
+function Base.strides(n::Vec{D,Int})::Vec{D,Int} where {D}
+    Vec{D,Int}(ntuple(dir -> dir==1 ? 1 : prod(n[d] for d in 1:dir-1), D))
 end
 
 end

@@ -35,7 +35,7 @@ end
 
 # Fun is a collection
 
-function Base.eltype(f::Fun{D,T,U})::Type where {D, T, U}
+function Base.eltype(::Type{Fun{D,T,U}})::Type where {D, T, U}
     U
 end
 function Base.length(f::Fun{D,T,U})::Int where {D, T, U}
@@ -109,6 +109,13 @@ end
 # TODO: bra and ket
 # end
 
+function Base.iszero(f::Fun{D,T,U})::Bool where {D, T<:Number, U}
+    all(iszero(f.coeffs))
+end
+function Base.:(==)(f::Fun{D,T,U}, g::Fun{D,T,U})::Bool where {D, T<:Number, U}
+    iszero(f - g)
+end
+
 function Base.max(f::Fun{D,T,U})::T where {D, T<:Number, U}
     maximum(f.coeffs)
 end
@@ -116,10 +123,8 @@ function Base.min(f::Fun{D,T,U})::T where {D, T<:Number, U}
     minimum(f.coeffs)
 end
 function Base.sum(f::Fun{D,T,U})::T where {D, T<:Number, U}
-    Ws = ntuple(D) do d
-        ws = [weight(dom, d, i) for i in 0:dom.n[d]-1]
-        Diagonal(ws)
-    end
+    dom = f.dom
+    Ws = weights(dom)
 
     n = dom.n
     s = U(0)
@@ -143,6 +148,7 @@ function Base.sum(f::Fun{D,T,U})::T where {D, T<:Number, U}
     else
         @assert false
     end
+    s
 end
 
 function LinearAlgebra.norm(f::Fun{D,T,U}, p::Real=2) where {D, T<:Number, U}
@@ -305,14 +311,14 @@ function approximate_delta(dom::Domain{D,T}, x::Vec{D,T})::Fun{D,T,T} where
     ix = Vec{D,Int}(ntuple(D) do d
         q = linear(dom.xmin[d], T(0), dom.xmax[d], T(dom.n[d] - 1), x[d])
         iq = floor(Int, q)
-        max(0, min(dom.n[d] - num_regions[d], iq))
+        max(0, min(dom.n[d] - 2, iq))
     end)
     for dic in CartesianIndices(ntuple(d -> 0:1, D))
         di = Vec(dic.I)
         i = ix - di
         if all((i .>= 0) & (i .< dom.n))
             ic = CartesianIndex((i .+ 1).elts)
-            f[ic] = basis(dom, i, ix, x)
+            fs[ic] = fbasis(dom, i, ix, x)
         end
     end
 
@@ -356,57 +362,6 @@ function approximate_delta(dom::Domain{D,T}, x::Vec{D,T})::Fun{D,T,T} where
         @assert false
     end
     Fun{D,T,T}(dom, cs)
-end
-
-
-
-export solve_dAlembert_Dirichlet
-function solve_dAlembert_Dirichlet(pot::Fun{D,T,U},
-                                   bvals::Fun{D,T,U})::Fun{D,T,U} where
-        {D, T<:Number, U}
-    dom = pot.dom
-    @assert bvals.dom == dom
-    @assert !any(dom.staggered)
-
-    n = dom.n
-    dx = spacing(dom)
-    dx2 = dx .* dx
-
-    di = ntuple(dir -> CartesianIndex(ntuple(d -> d==dir, D-1)), D-1)
-
-    sol = similar(pot.coeffs)
-    if D == 4
-        # Initial conditions
-        sol[:,:,:,1] = bvals.coeffs[:,:,:,1]
-        sol[:,:,:,2] = bvals.coeffs[:,:,:,2]
-        for j=3:n[4]
-            # Boundary conditions
-            sol[1,:,:,j] = bvals.coeffs[1,:,:,j]
-            sol[end,:,:,j] = bvals.coeffs[end,:,:,j]
-            sol[:,1,:,j] = bvals.coeffs[:,1,:,j]
-            sol[:,end,:,j] = bvals.coeffs[:,end,:,j]
-            sol[:,:,1,j] = bvals.coeffs[:,:,1,j]
-            sol[:,:,end,j] = bvals.coeffs[:,:,end,j]
-            # Wave equation
-            for i in CartesianIndices(ntuple(d -> 2:n[d]-1, D-1))
-                lsol = (+ (+ sol[i-di[1],j-1]
-                           - 2*sol[i,j-1]
-                           + sol[i+di[1],j-1]) / dx2[1]
-                        + (+ sol[i-di[2],j-1]
-                           - 2*sol[i,j-1]
-                           + sol[i+di[2],j-1]) / dx2[3]
-                        + (+ sol[i-di[3],j-1]
-                           - 2*sol[i,j-1]
-                           + sol[i+di[3],j-1]) / dx2[3])
-                sol[i,j] = (- sol[i,j-2] + 2*sol[i,j-1]
-                            + dx2[4] * (lsol - pot.coeffs[i,j-1]))
-            end
-        end
-    else
-        @assert false
-    end
-
-    Fun{D,T,U}(dom, sol)
 end
 
 end

@@ -295,6 +295,12 @@ git-tree-sha1 = "75a54abd10709c01f1b86b84ec225d26e840ed58"
 uuid = "e89f7d12-3494-54d1-8411-f7d8b9ae1f27"
 version = "0.5.0"
 
+[[Memoize]]
+deps = ["Test"]
+git-tree-sha1 = "d9683969337ad20dc957122038bd2c0ead4b5209"
+uuid = "c03570c3-d221-55d1-a50c-7939bbd78826"
+version = "0.3.0"
+
 [[Missings]]
 git-tree-sha1 = "29858ce6c8ae629cf2d733bffa329619a1c843d0"
 uuid = "e1d29d7a-bbdc-5cf2-9ac0-f12de2c33e28"

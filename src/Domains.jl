@@ -75,6 +75,16 @@ end
 
 
 
+function Base.:(==)(d1::Domain{D,T}, d2::Domain{D,T})::Bool where {D, T}
+    (d1.dual == d2.dual &&
+     d1.staggered == d2.staggered &&
+     d1.n == d2.n &&
+     d1.metric == d2.metric &&
+     d1.xmin == d2.xmin &&
+     d1.xmax == d2.xmax)
+end
+
+
 # Coordinates of collocation points
 export coord
 function coord(dom::Domain{D,T}, d::Int, i::Number)::T where {D, T<:Number}
