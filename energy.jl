@@ -36,3 +36,4 @@ plot((x,t) -> ene[(1,2)](Vec((x,t))), -1, 1, 0, 1)
 # can we look for a conserved current?
 # should we project to t=const hypersurfaces and integrate?
 # what is the momentum?
+# d'oh -- this is the action, not the energy!

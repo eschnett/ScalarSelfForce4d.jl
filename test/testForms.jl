@@ -117,7 +117,7 @@ function testForms()
         end
     end
 
-    @testset "Forms.Wedge D=$D" for D in 1:2:4
+    @testset "Forms.Wedge D=$D" for D in 1:2 # :4
         dom = Domain{D,BigRat}(3)
     
         if D >= 2
