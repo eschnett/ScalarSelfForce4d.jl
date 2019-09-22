@@ -196,6 +196,7 @@ end
 
 # TODO: composition
 
+export fconst
 function fconst(dom::Domain{D,T}, f::U)::Fun{D,T,U} where {D,T <: Number,U}
     cs = fill(f, dom.n.elts)
     Fun{D,T,U}(dom, cs)

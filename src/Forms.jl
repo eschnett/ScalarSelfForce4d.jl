@@ -425,22 +425,26 @@ end
 
 
 
+export wedge
+
 function wedge(f::Form{D,RI,Dual,T,U},
                g::Form{D,RJ,Dual,T,U})::Form{D,RI + RJ,Dual,T,U} where
         {D,RI,RJ,Dual,T,U}
     domi = f.dom
-    domj = f.dom
+    domj = g.dom
     @assert (makeunstaggered(makeprimal(domi)) ==
              makeunstaggered(makeprimal(domj)))
+    dom = domi
 
     @assert !Dual               # TODO
+    @assert D <= 2              # TODO
 
-    di = CartesianIndex(ntuple(d->d == dir, D))
+    di = ntuple(dir -> CartesianIndex(ntuple(d->d == dir, D)), D)
 
     if RI == 0 && RJ == 0
         u0 = f[()]
         v0 = g[()]
-        dom0 = makestaggered(dom, ((false, false)))
+        dom0 = makeunstaggered(dom)
         r0 = Array{U}(undef, dom0.n.elts)
         for i in CartesianIndices(size(r0))
             r0[i] = + u0[i] * v0[i]
@@ -450,28 +454,28 @@ function wedge(f::Form{D,RI,Dual,T,U},
         if D == 1
             u1x = f[(1,)]
             v0 = g[()]
-            dom1x = makestaggered(dom, ((true,)))
+            dom1x = makestaggered(dom, Vec((true,)))
             r1x = Array{U}(undef, dom1x.n.elts)
             for i in CartesianIndices(size(r1x))
-                r1x[i] = T(1) / 2 * (+ u1x[i] * v1y[i]
-                                   - u1x[i + di[1]] * v1y[i])
+                r1x[i] = T(1) / 2 * (+ u1x[i] * v0[i]
+                                     - u1x[i] * v0[i + di[1]])
             end
             Form(Dict((1,) => Fun(dom1x, r1x)))
         elseif D == 2
             u1x = f[(1,)]
             u1y = f[(2,)]
             v0 = g[()]
-            dom1x = makestaggered(dom, ((true, false)))
-            dom1y = makestaggered(dom, ((false, true)))
+            dom1x = makestaggered(dom, Vec((true, false)))
+            dom1y = makestaggered(dom, Vec((false, true)))
             r1x = Array{U}(undef, dom1x.n.elts)
             for i in CartesianIndices(size(r1x))
                 r1x[i] = T(1) / 2 * (+ u1x[i] * v0[i]
-                                   - u1x[i] * v0[i + di[1]])
+                                     - u1x[i] * v0[i + di[1]])
             end
             r1y = Array{U}(undef, dom1y.n.elts)
             for i in CartesianIndices(size(r1y))
                 r1y[i] = T(1) / 2 * (+ u1y[i] * v0[i]
-                                   - u1y[i] * v0[i + di[2]])
+                                     - u1y[i] * v0[i + di[2]])
             end
             Form(Dict((1,) => Fun(dom1x, r1x), (2,) => Fun(dom1y, r1y)))
         else
@@ -481,28 +485,28 @@ function wedge(f::Form{D,RI,Dual,T,U},
         if D == 1
             u0 = f[()]
             v1x = g[(1,)]
-            dom1x = makestaggered(dom, ((true,)))
+            dom1x = makestaggered(dom, Vec((true,)))
             r1x = Array{U}(undef, dom1x.n.elts)
             for i in CartesianIndices(size(r1x))
                 r1x[i] = T(1) / 2 * (+ u0[i] * v1x[i]
-                                   - u0[i] * v1x[i + di[1]])
+                                     - u0[i + di[1]] * v1x[i])
             end
             Form(Dict((1,) => Fun(dom1x, r1x)))
         elseif D == 2
             u0 = f[()]
             v1x = g[(1,)]
             v1y = g[(2,)]
-            dom1x = makestaggered(dom, ((true, false)))
-            dom1y = makestaggered(dom, ((false, true)))
+            dom1x = makestaggered(dom, Vec((true, false)))
+            dom1y = makestaggered(dom, Vec((false, true)))
             r1x = Array{U}(undef, dom1x.n.elts)
             for i in CartesianIndices(size(r1x))
                 r1x[i] = T(1) / 2 * (+ u0[i] * v1x[i]
-                                   - u0[i] * v1x[i + di[1]])
+                                     - u0[i + di[1]] * v1x[i])
             end
             r1y = Array{U}(undef, dom1y.n.elts)
             for i in CartesianIndices(size(r1y))
                 r1y[i] = T(1) / 2 * (+ u0[i] * v1y[i]
-                                   - u0[i] * v1y[i + di[2]])
+                                     - u0[i + di[2]] * v1y[i])
             end
             Form(Dict((1,) => Fun(dom1x, r1x), (2,) => Fun(dom1y, r1y)))
         else
@@ -512,13 +516,13 @@ function wedge(f::Form{D,RI,Dual,T,U},
         if D == 2
             u2xy = f[(1, 2)]
             v0 = g[()]
-            dom2xy = makestaggered(dom, ((true, true)))
+            dom2xy = makestaggered(dom, Vec((true, true)))
             r2xy = Array{U}(undef, dom2xy.n.elts)
             for i in CartesianIndices(size(r2xy))
                 r2xy[i] = T(1) / 4 * (+ u2xy[i] * v0[i]
-                                    - u2xy[i + di[1]] * v0[i]
-                                    - u2xy[i + di[2]] * v0[i]
-                                    + u2xy[i + di[1] + di[2]] * v0[i])
+                                      - u2xy[i] * v0[i + di[1]]
+                                      - u2xy[i] * v0[i + di[2]]
+                                      + u2xy[i] * v0[i + di[1] + di[2]])
             end
             Form(Dict((1, 2) => Fun(dom2xy, r2xy)))
         else
@@ -528,13 +532,13 @@ function wedge(f::Form{D,RI,Dual,T,U},
         if D == 2
             u0 = f[()]
             v2xy = g[(1, 2)]
-            dom2xy = makestaggered(dom, ((true, true)))
+            dom2xy = makestaggered(dom, Vec((true, true)))
             r2xy = Array{U}(undef, dom2xy.n.elts)
             for i in CartesianIndices(size(r2xy))
                 r2xy[i] = T(1) / 4 * (+ u0[i] * v2xy[i]
-                                    - u0[i] * v2xy[i + di[1]]
-                                    - u0[i] * v2xy[i + di[2]]
-                                    + u0[i] * v2xy[i + di[1] + di[2]])
+                                      - u0[i + di[1]] * v2xy[i]
+                                      - u0[i + di[2]] * v2xy[i]
+                                      + u0[i + di[1] + di[2]] * v2xy[i])
             end
             Form(Dict((1, 2) => Fun(dom2xy, r2xy)))
         else
@@ -546,18 +550,55 @@ function wedge(f::Form{D,RI,Dual,T,U},
             u1y = f[(2,)]
             v1x = g[(1,)]
             v1y = g[(2,)]
-            dom2xy = makestaggered(dom, ((true, true)))
+            dom2xy = makestaggered(dom, Vec((true, true)))
             r2xy = Array{U}(undef, dom2xy.n.elts)
             for i in CartesianIndices(size(r2xy))
                 r2xy[i] = T(1) / 4 * (+ u1x[i] * v1y[i]
-                                    - u1x[i + di] * v1y[i]
-                                    - u1x[i + di] * v1y[i + di]
-                                    + u1x[i] * v1y[i + di])
+                                      - u1y[i] * v1x[i]
+                                      + u1x[i + di[2]] * v1y[i]
+                                      - u1y[i] * v1x[i + di[2]]
+                                      + u1x[i + di[2]] * v1y[i + di[1]]
+                                      - u1y[i + di[1]] * v1x[i + di[2]]
+                                      + u1x[i] * v1y[i + di[1]]
+                                      - u1y[i + di[1]] * v1x[i])
             end
             Form(Dict((1, 2) => Fun(dom2xy, r2xy)))
         else
             @assert false
         end
+    else
+        @assert false
+    end
+end
+
+function wedge(f::Form{D,R,false,T,U},
+               g::Form{D,RJ,true,T,U})::Form{D,D,false,T,U} where {D,R,RJ,T,U}
+    @assert RJ == D - R
+    @assert (makeunstaggered(makeprimal(f.dom)) ==
+             makeunstaggered(makeprimal(g.dom)))
+    dom = f.dom
+    di = ntuple(dir -> CartesianIndex(ntuple(d->d == dir, D)), D)
+
+    if R == 1
+        fc = ntuple(d ->f[(d,)], D)
+        gc = ntuple(d ->g[Tuple(filter(!=(d), 1:D))], D)
+        rdom = makestaggered(dom, Vec(ntuple(d -> true, D)))
+        rc = Array{U}(undef, rdom.n.elts)
+        for i in CartesianIndices(size(rc))
+            ri = T(0)
+            for d in 1:D
+                s = bitsign(d - 1)
+                rd = T(0)
+                for di in CartesianIndices(ntuple(d -> 0:1, D))
+                    if di[d] == 0
+                        rd += fc[d][i + di] * gc[d][i + di]
+                    end
+                end
+                ri += T(s) * rd
+            end
+            rc[i] = T(1)/2^(D-1) * ri
+        end
+        Form(Dict(Tuple(1:D) => Fun(rdom, rc)))
     else
         @assert false
     end
