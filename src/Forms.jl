@@ -439,7 +439,7 @@ function wedge(f::Form{D,RI,Dual,T,U},
     @assert !Dual               # TODO
     @assert D <= 2              # TODO
 
-    di = ntuple(dir -> CartesianIndex(ntuple(d->d == dir, D)), D)
+    di = ntuple(dir->CartesianIndex(ntuple(d->d == dir, D)), D)
 
     if RI == 0 && RJ == 0
         u0 = f[()]
@@ -577,26 +577,26 @@ function wedge(f::Form{D,R,false,T,U},
     @assert (makeunstaggered(makeprimal(f.dom)) ==
              makeunstaggered(makeprimal(g.dom)))
     dom = f.dom
-    di = ntuple(dir -> CartesianIndex(ntuple(d->d == dir, D)), D)
+    di = ntuple(dir->CartesianIndex(ntuple(d->d == dir, D)), D)
 
     if R == 1
-        fc = ntuple(d ->f[(d,)], D)
-        gc = ntuple(d ->g[Tuple(filter(!=(d), 1:D))], D)
-        rdom = makestaggered(dom, Vec(ntuple(d -> true, D)))
+        fc = ntuple(d->f[(d,)], D)
+        gc = ntuple(d->g[Tuple(filter(!=(d), 1:D))], D)
+        rdom = makestaggered(dom, Vec(ntuple(d->true, D)))
         rc = Array{U}(undef, rdom.n.elts)
         for i in CartesianIndices(size(rc))
             ri = T(0)
             for d in 1:D
                 s = bitsign(d - 1)
                 rd = T(0)
-                for di in CartesianIndices(ntuple(d -> 0:1, D))
+                for di in CartesianIndices(ntuple(d->0:1, D))
                     if di[d] == 0
                         rd += fc[d][i + di] * gc[d][i + di]
                     end
                 end
                 ri += T(s) * rd
             end
-            rc[i] = T(1)/2^(D-1) * ri
+            rc[i] = T(1) / 2^(D - 1) * ri
         end
         Form(Dict(Tuple(1:D) => Fun(rdom, rc)))
     else

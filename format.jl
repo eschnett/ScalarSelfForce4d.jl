@@ -3,7 +3,9 @@ using DocumentFormat
 function format!(sourcefile)
     src = String(read(sourcefile))
     res = DocumentFormat.format(src)
-    write(sourcefile, res)
+    if res != src
+        write(sourcefile, res)
+    end
 end
 
 sourcefiles = [
