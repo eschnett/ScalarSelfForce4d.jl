@@ -53,4 +53,6 @@ function testDomains()
 
 end
 
-testDomains()
+if runtests
+    testDomains()
+end

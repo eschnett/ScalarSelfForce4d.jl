@@ -153,7 +153,7 @@ function weight(dom::Domain{D,T}, d::Int, i::Int)::T where {D,T <: Number}
             return dx / 2
         end
     else
-        return dx
+        return T(1)
     end
 end
 

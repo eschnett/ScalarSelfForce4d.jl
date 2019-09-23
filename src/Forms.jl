@@ -599,6 +599,19 @@ function wedge(f::Form{D,R,false,T,U},
             rc[i] = T(1) / 2^(D - 1) * ri
         end
         Form(Dict(Tuple(1:D) => Fun(rdom, rc)))
+    elseif R == 2
+        if D == 2
+            fc = f[Tuple(1:D)]
+            gc = g[()]
+            rdom = makestaggered(dom, Vec(ntuple(d->true, D)))
+            rc = Array{U}(undef, rdom.n.elts)
+            for i in CartesianIndices(size(rc))
+                rc[i] = fc[i] * gc[i]
+            end
+            Form(Dict(Tuple(1:D) => Fun(rdom, rc)))
+        else
+            @assert false
+        end
     else
         @assert false
     end

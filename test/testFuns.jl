@@ -102,24 +102,13 @@ function testFuns()
             @test isapprox(sum(axyz), 0; atol = atol)
         end
 
-        err = maxabsdiff(dom(D), sinpiD, asinpi(D))
-        if D == 1
-            @test isapprox(err, 0.028537112649043128; atol = 1.0e-6)
-        elseif D == 2
-            @test isapprox(err, 0.0577555389039901; atol = 1.0e-6)
-        elseif D == 3
-            @test isapprox(err, 0.08767328827754184; atol = 1.0e-6)
-        else
-            @assert false
-        end
-        @test isapprox(sum(asinpi(D)), 0; atol = atol)
-
         for dual in [false]     # :true
             for staggerc in CartesianIndices(ntuple(d->0:1, D))
                 stagger = Vec(ntuple(d->Bool(staggerc[d]), D))
                 sdom = makestaggered(makedual(dom(D), dual), stagger)
                 sasinpi = approximate(sinpiD, sdom)
                 err = maxabsdiff(sdom, sinpiD, sasinpi)
+                sasinpi2 = approximate(x -> sinpiD(x)^2, sdom)
                 if D == 1
                     if stagger == Vec((false,))
                         @test isapprox(err, 0.028537112649043128; atol = 1.0e-6)
@@ -164,6 +153,7 @@ function testFuns()
                     @assert false
                 end
                 @test isapprox(sum(sasinpi), 0; atol = atol)
+                @test isapprox(sum(sasinpi2), 1; atol = atol)
             end
         end
     end
@@ -176,4 +166,6 @@ function testFuns()
     end
 end
 
-testFuns()
+if runtests
+    testFuns()
+end

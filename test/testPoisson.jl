@@ -29,6 +29,9 @@ end
         eps
     end
 end
+function etotD(dom::Domain{D,T}, t::T)::T where {D,T}
+    T(pi)^2 * D/2
+end
 
 
 
@@ -59,23 +62,52 @@ function testPoisson()
         err = sol - bvals
         maxerr = norm(err[()], Inf)
         @test 0.037 <= maxerr < 0.038
+
+        phi = sol
+        dphi = deriv(phi)
+        sdphi = star(dphi)
+        act = wedge(dphi, sdphi) / 2.0
+
+        # Note: The action has a sign error because the metric
+        # signature is not yet handled properly
+        # et = Form(Dict(() => approximate(xt -> xt[end], dom)))
+        # nt = deriv(et)
+        # mom = phit
+        # ham = wedge(mom, star(mom)) - act
+        ham = act
+        sldom = makestaggered(ldom(4), Vec(ntuple(d -> true, 4)))
+        eham = Form(Dict((1,2,3,4) => approximate(epsD, sldom)))
+        maxerr = norm((ham - eham)[(1,2,3,4)], Inf)
+        @test isapprox(maxerr, 0.0027673958110688065; atol=1.0e-6)
+
+        sdom3 = makestaggered(dom(3), Vec(ntuple(d -> true, 3)))
+        etot = Array{Float64}(undef, size(ham[(1,2,3,4)].coeffs, 4))
+        dx4 = spacing(ldom(4))[4]
+        for i in 1:length(etot)
+            cs = ham[(1,2,3,4)].coeffs[:,:,:,i] ./ dx4
+            ene = Form(Dict((1,2,3) => Fun{3,Float64,Float64}(sdom3, cs)))
+            etot[i] = sum(ene[(1,2,3)])
+        end
+        # etot = 14.804406601634037
+        @test isapprox(minimum(etot), 18.071224176938696; atol=1.0e-6)
+        @test isapprox(maximum(etot), 22.494721301641462; atol=1.0e-6)
     end
 
     @testset "Scalar wave equation with singular source" begin
         @assert all(ldom(4).n[d] == dom(3).n[d] for d in 1:3)
-    
+
         # Source
         lap3 = laplace(Val(0), Val(false), dom(3))
         adel3 = 2pi * approximate_delta(dom(3), zeros(Vec{3,Float64}))
         del3 = Form(Dict(() => adel3))
         dir3 = dirichlet(Val(0), Val(false), dom(3))
         bvals3 = zeros(typeof(del3), dom(3))
-    
+
         bnd3 = boundary(Val(0), Val(false), dom(3))
         op3 = mix_op_bc(bnd3, lap3, dir3, dom(3))
         rhs3 = mix_op_bc(bnd3, del3, bvals3)
         pot3 = op3 \ rhs3
-    
+
         # Potential (source)
         asrc = zeros(Fun{4,Float64,Float64}, ldom(4))
         for i4 in 1:ldom(4).n[4]
@@ -89,13 +121,15 @@ function testPoisson()
             abvals.coeffs[:,:,:,i4] = pot3[()].coeffs[:,:,:]
         end
         bvals = Form(Dict(() => abvals))
-    
+
         sol = solve_dAlembert_Dirichlet(src, bvals)
-    
+
         err = sol - bvals
         maxerr = norm(err[()], Inf)
         @test maxerr < 1.0e-12
     end
 end
 
-testPoisson()
+if runtests
+    testPoisson()
+end

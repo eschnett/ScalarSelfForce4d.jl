@@ -16,4 +16,6 @@ function testVecs()
 
 end
 
-testVecs()
+if runtests
+    testVecs()
+end

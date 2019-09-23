@@ -7,4 +7,6 @@ function testOps()
     end
 end
 
-testOps()
+if runtests
+    testOps()
+end

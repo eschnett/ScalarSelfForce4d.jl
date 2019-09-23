@@ -48,4 +48,6 @@ function testQuadrature()
 
 end
 
-testQuadrature()
+if runtests
+    testQuadrature()
+end

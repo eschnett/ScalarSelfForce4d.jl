@@ -15,4 +15,6 @@ function testBases()
     end
 end
 
-testBases()
+if runtests
+    testBases()
+end

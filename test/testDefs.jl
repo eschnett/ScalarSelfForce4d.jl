@@ -73,4 +73,6 @@ function testDefs()
 
 end
 
-testDefs()
+if runtests
+    testDefs()
+end

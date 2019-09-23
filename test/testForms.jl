@@ -460,4 +460,6 @@ function testForms()
     end
 end
 
-testForms()
+if runtests
+    testForms()
+end
