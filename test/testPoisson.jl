@@ -1,5 +1,7 @@
 using ScalarSelfForce4d.Domains
 
+using Arpack
+using DataStructures
 using Memoize
 
 
@@ -91,6 +93,48 @@ function testPoisson()
         # etot = 14.804406601634037
         @test isapprox(minimum(etot), 18.071224176938696; atol=1.0e-6)
         @test isapprox(maximum(etot), 22.494721301641462; atol=1.0e-6)
+    end
+
+    @testset "Scalar wave equation with eigenmodes" begin
+        lap3 = laplace(Val(0), Val(false), dom(3))
+        dir3 = dirichlet(Val(0), Val(false), dom(3))
+        bnd3 = boundary(Val(0), Val(false), dom(3))
+        op3 = mix_op_bc(bnd3, lap3, -dir3, dom(3))
+
+        nbndev = 9^3 - (9-2)^3
+        opc3 = op3.comps[Vec{0,Int}(())][Vec{0,Int}(())]
+        lambda, v = eigs(opc3; nev=nbndev+50, which=:LR)
+        # lambda, v = eigen(Matrix(opc))
+
+        # Count boundary eigenvalues
+        @assert count(x -> abs(x+1)<1.0e-12, lambda) == nbndev
+        # Normalize eigenvalues (avoid round-off)
+        lambda2 = Array{Float64}(undef, length(lambda))
+        for i in 1:length(lambda2)
+            if i>1 && abs(lambda[i] - lambda2[i-1]) < 1.0e-12
+                lambda2[i] = lambda2[i-1]
+            else
+                lambda2[i] = lambda[i]
+            end
+        end
+        # Determine second non-boundary eigenvalue with multiplicity 1
+        # (this is the mode we want)
+        ms = counter(lambda2)
+        l = sort(collect(keys(filter(lm->lm[2]==1, ms))), rev=true)[2]
+        n = findfirst(==(l), lambda)
+        @assert n !== nothing
+
+        pot = zeros(Form{4,0,false,Float64,Float64}, ldom(4))
+        abvals = zeros(Fun{4,Float64,Float64}, ldom(4))
+        for i in 1:size(abvals.coeffs,4)
+            abvals.coeffs[:,:,:,i] = reshape(real.(v[:,n]), (9,9,9))
+        end
+        bvals = Form(Dict(() => abvals))
+        sol = solve_dAlembert_Dirichlet(pot, bvals)
+
+        err = sol - bvals
+        maxerr = norm(err[()], Inf)
+        @test isapprox(maxerr, 0.2568071901840646; atol=1.0e-6)
     end
 
     @testset "Scalar wave equation with singular source" begin
