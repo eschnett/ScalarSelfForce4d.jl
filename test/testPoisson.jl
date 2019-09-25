@@ -109,19 +109,20 @@ function testPoisson()
         # Count boundary eigenvalues
         @assert count(x -> abs(x+1)<1.0e-12, lambda) == nbndev
         # Normalize eigenvalues (avoid round-off)
-        lambda2 = Array{Float64}(undef, length(lambda))
+        lambda1 = real.(lambda)
+        lambda2 = Array{Float64}(undef, length(lambda1))
         for i in 1:length(lambda2)
-            if i>1 && abs(lambda[i] - lambda2[i-1]) < 1.0e-12
+            if i>1 && abs(lambda1[i] - lambda2[i-1]) < 1.0e-12
                 lambda2[i] = lambda2[i-1]
             else
-                lambda2[i] = lambda[i]
+                lambda2[i] = lambda1[i]
             end
         end
         # Determine second non-boundary eigenvalue with multiplicity 1
         # (this is the mode we want)
         ms = counter(lambda2)
         l = sort(collect(keys(filter(lm->lm[2]==1, ms))), rev=true)[2]
-        n = findfirst(==(l), lambda)
+        n = findfirst(==(l), lambda1)
         @assert n !== nothing
 
         pot = zeros(Form{4,0,false,Float64,Float64}, ldom(4))
