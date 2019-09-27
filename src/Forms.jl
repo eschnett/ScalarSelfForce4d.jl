@@ -465,94 +465,79 @@ export wedge
     quote
         dom = f.dom
         @assert g.dom == dom
-        $([
-            begin
-                fstag = Vec{D,Bool}(ntuple(d->Bool(fstagc[d]), D))
-                if count(fstag) == RI
-                    fidx = Vec{RI,Int}(Tuple(staggered2idx(fstag)))
-                    quote
-                        $(mksym(:fcomps, fidx)) = f[$fidx]
-                    end # quote
-                end # if
-            end # begin
-            for fstagc in CartesianIndices(ntuple(d->0:1, D))
-        ]...)
-        $([
-            begin
-                gstag = Vec{D,Bool}(ntuple(d->Bool(gstagc[d]), D))
-                if count(gstag) == RJ
-                    gidx = Vec{RJ,Int}(Tuple(staggered2idx(gstag)))
-                    quote
-                        $(mksym(:gcomps, gidx)) = g[$gidx]
-                    end # quote
-                end # if
-            end # begin
-            for gstagc in CartesianIndices(ntuple(d->0:1, D))
-        ]...)
+        $([begin
+            fstag = Vec{D,Bool}(ntuple(d->Bool(fstagc[d]), D))
+            if count(fstag) == RI
+                fidx = Vec{RI,Int}(Tuple(staggered2idx(fstag)))
+                quote
+                    $(mksym(:fcomps, fidx)) = f[$fidx]
+                end # quote
+            end # if
+        end for fstagc in CartesianIndices(ntuple(d->0:1, D))]...)
+        $([begin
+            gstag = Vec{D,Bool}(ntuple(d->Bool(gstagc[d]), D))
+            if count(gstag) == RJ
+                gidx = Vec{RJ,Int}(Tuple(staggered2idx(gstag)))
+                quote
+                    $(mksym(:gcomps, gidx)) = g[$gidx]
+                end # quote
+            end # if
+        end for gstagc in CartesianIndices(ntuple(d->0:1, D))]...)
         rcomps = Dict{Vec{$R,Int}, Fun{D,T,U}}()
         # Loop over all components of the result
-        $([
-            begin
-                rstag = Vec{D,Bool}(ntuple(d->Bool(rstagc[d]), D))
-                if count(rstag) == R
-                    ridx = Vec{R,Int}(Tuple(staggered2idx(rstag)))
-                    quote
-                        rdom = makestaggered(dom, $rstag)
-                        rc = Array{U}(undef, rdom.n.elts)
-                        # Loop over all R-cells
-                        for i in CartesianIndices(size(rc))
-                            rci = U(0)
-                            # Loop over all contributing components of f and g
-                            $([
-                                begin
-                                    fstag = Vec{D,Bool}(ntuple(d->Bool(fstagc[d]), D))
-                                    if all(~fstag | rstag) && count(fstag) == RI
-                                        gstag = rstag & ~fstag
-                                        @assert count(gstag) == RJ
-                                        @assert all(~ (fstag & gstag))
-                                        @assert all(fstag | gstag == rstag)
-                                        fidx = Vec{RI,Int}(Tuple(staggered2idx(fstag)))
-                                        gidx = Vec{RJ,Int}(Tuple(staggered2idx(gstag)))
-                                        # Loop over all vertices of the R-cell
-                                        dirange = ntuple(d -> 0 : Int(rstag[d]), D)
+        $([begin
+            rstag = Vec{D,Bool}(ntuple(d->Bool(rstagc[d]), D))
+            if count(rstag) == R
+                ridx = Vec{R,Int}(Tuple(staggered2idx(rstag)))
+                quote
+                    rdom = makestaggered(dom, $rstag)
+                    rc = Array{U}(undef, rdom.n.elts)
+                    # Loop over all R-cells
+                    for i in CartesianIndices(size(rc))
+                        rci = U(0)
+                        # Loop over all contributing components of f and g
+                        $([begin
+                            fstag = Vec{D,Bool}(ntuple(d->Bool(fstagc[d]), D))
+                            if all(~fstag | rstag) && count(fstag) == RI
+                                gstag = rstag & ~fstag
+                                @assert count(gstag) == RJ
+                                @assert all(~ (fstag & gstag))
+                                @assert all(fstag | gstag == rstag)
+                                fidx = Vec{RI,Int}(Tuple(staggered2idx(fstag)))
+                                gidx = Vec{RJ,Int}(Tuple(staggered2idx(gstag)))
+                                # Loop over all vertices of the R-cell
+                                dirange = ntuple(d -> 0 : Int(rstag[d]), D)
+                                quote
+                                    $([begin
+                                        fdi = CartesianIndex(ntuple(d -> fstag[d] ? 0 : di[d], D))
+                                        gdi = CartesianIndex(ntuple(d -> gstag[d] ? 0 : di[d], D))
+                                        @assert all(fdi + gdi == di)
+                                        s = levicivita(Int[fidx..., gidx...])
+                                        qidx = Int[fidx..., gidx...]
+                                        s = 1
+                                        while !issorted(qidx)
+                                            for i in 1:length(qidx)-1
+                                                if qidx[i] > qidx[i+1]
+                                                    @swap! qidx[i] qidx[i+1]
+                                                    s = -s
+                                                end
+                                            end
+                                        end
+                                        @assert abs(s) == 1
                                         quote
-                                            $([
-                                                begin
-                                                    fdi = CartesianIndex(ntuple(d -> fstag[d] ? 0 : di[d], D))
-                                                    gdi = CartesianIndex(ntuple(d -> gstag[d] ? 0 : di[d], D))
-                                                    @assert all(fdi + gdi == di)
-                                                    s = levicivita(Int[fidx..., gidx...])
-                                                    qidx = Int[fidx..., gidx...]
-                                                    s = 1
-                                                    while !issorted(qidx)
-                                                        for i in 1:length(qidx)-1
-                                                            if qidx[i] > qidx[i+1]
-                                                                @swap! qidx[i] qidx[i+1]
-                                                                s = -s
-                                                            end
-                                                        end
-                                                    end
-                                                    @assert abs(s) == 1
-                                                    quote
-                                                        rci += $s * ($(mksym(:fcomps, fidx))[i + $fdi] * $(mksym(:gcomps, gidx))[i + $gdi])
-                                                    end # quote
-                                                end # begin
-                                                for di in CartesianIndices(dirange)
-                                            ]...)
+                                            rci += $s * ($(mksym(:fcomps, fidx))[i + $fdi] * $(mksym(:gcomps, gidx))[i + $gdi])
                                         end # quote
-                                    end # if
-                                end # begin
-                                for fstagc in CartesianIndices(ntuple(d->0:1, D))
-                            ]...)
-                            c = 2^$R
-                            rc[i] = rci / c
-                        end # for i
-                        rcomps[$ridx] = Fun{D,T,U}(rdom, rc)
-                    end # quote
-                end # if
-            end # begin
-            for rstagc in CartesianIndices(ntuple(d->0:1, D))
-        ]...)
+                                    end for di in CartesianIndices(dirange)]...)
+                                end # quote
+                            end # if
+                        end for fstagc in CartesianIndices(ntuple(d->0:1, D))]...)
+                        c = 2^$R
+                        rc[i] = rci / c
+                    end # for i
+                    rcomps[$ridx] = Fun{D,T,U}(rdom, rc)
+                end # quote
+            end # if
+        end for rstagc in CartesianIndices(ntuple(d->0:1, D))]...)
         Form(rcomps)
     end # quote
 end
@@ -560,94 +545,199 @@ end
 function wedge(f::Form{D,RI,false,T,U},
                g::Form{D,RJ,true,T,U})::Form{D,RI+RJ,false,T,U} where
         {D,RI,RJ,T,U}
-    @assert RI == 0 || RJ == D - RI
-    @assert (makeunstaggered(makeprimal(f.dom)) ==
-             makeunstaggered(makeprimal(g.dom)))
+    R = RI + RJ
     dom = f.dom
+    @assert makeunstaggered(makeprimal(g.dom)) == dom
     di = ntuple(dir->CartesianIndex(ntuple(d->d == dir, D)), D)
 
-    if RI == 0
-        if D == 2 && RJ == 1
-            fc = f[()]
-            gc = ntuple(d->g[(d,)], D)
-            rdom1x = makestaggered(dom, Vec((true, false)))
-            rdom1y = makestaggered(dom, Vec((false, true)))
-            rc1x = Array{U}(undef, rdom1x.n.elts)
-            rc1y = Array{U}(undef, rdom1y.n.elts)
-            for i in CartesianIndices(size(rc1x))
-                # rc1x[i] = T(1)/2 * (fc[i] * gc[1][i] + fc[i+di[1]] * gc[1][i])
-                a = fc[i]
-                b = gc[1][i]
-                c = fc[i+di[2]]
-                r = T(1)/2 * (a*b+c*b)
-                rc1x[i] = r
-            end
-            for i in CartesianIndices(size(rc1y))
-                rc1y[i] = T(1)/2 * (fc[i] * gc[2][i] + fc[i+di[2]] * gc[2][i]);
-            end
-            Form(Dict((1,) => Fun(rdom1x, rc1x), (2,) => Fun(rdom1y, rc1y)))
-        else
-            @assert false
+    if RI == 0 && RJ == D
+        fc0 = f[()]
+        gcd = g[Tuple(1:D)]
+        rdomd = makestaggered(dom, trues(Vec{D,Bool}))
+        rcd = Array{U}(undef, rdomd.n.elts)
+        for i in CartesianIndices(size(rcd))
+            rcd[i] = fc0[i] * gcd[i]
         end
-    elseif RI == 1 && RJ == D - RI
-        fc = ntuple(d->f[(d,)], D)
-        gc = ntuple(d->g[Tuple(filter(!=(d), 1:D))], D)
-        rdom = makestaggered(dom, Vec(ntuple(d->true, D)))
-        rc = Array{U}(undef, rdom.n.elts)
-        for i in CartesianIndices(size(rc))
-            ri = T(0)
-            for d in 1:D
-                s = bitsign(d - 1)
-                rd = T(0)
-                for di in CartesianIndices(ntuple(d->0:1, D))
-                    if di[d] == 0
-                        rd += fc[d][i + di] * gc[d][i + di]
-                    end
-                end
-                ri += T(s) * rd
-            end
-            rc[i] = T(1) / 2^(D - 1) * ri
+        Form(Dict(Tuple(1:D) => Fun(rdomd, rcd)))
+    elseif RI == D && RJ == 0
+        fcd = f[Tuple(1:D)]
+        gc0 = g[()]
+        rdomd = makestaggered(dom, trues(Vec{D,Bool}))
+        rcd = Array{U}(undef, rdomd.n.elts)
+        for i in CartesianIndices(size(rcd))
+            rcd[i] = fcd[i] * gc0[i]
         end
-        Form(Dict(Tuple(1:D) => Fun(rdom, rc)))
-    elseif RI == 2 && RJ == D - RI
-        if D == 2
-            fc = f[Tuple(1:D)]
-            gc = g[()]
-            rdom = makestaggered(dom, Vec(ntuple(d->true, D)))
-            rc = Array{U}(undef, rdom.n.elts)
-            for i in CartesianIndices(size(rc))
-                rc[i] = fc[i] * gc[i]
-            end
-            Form(Dict(Tuple(1:D) => Fun(rdom, rc)))
-        else
-            @assert false
+        Form(Dict(Tuple(1:D) => Fun(rdomd, rcd)))
+    elseif D == 2 && RI == 1 && RJ == 1
+        fc1x = f[(1,)]
+        fc1y = f[(2,)]
+        gc1x = g[(1,)]
+        gc1y = g[(2,)]
+        rdom2xy = makestaggered(dom, trues(Vec{D,Bool}))
+        rc2xy = Array{U}(undef, rdom2xy.n.elts)
+        for i in CartesianIndices(size(rc2xy))
+            rc2xy[i] = U(1)/2 *
+                (+ (fc1x[i] * gc1y[i] + fc1x[i+di[2]] * gc1y[i+di[2]])
+                 - (fc1y[i] * gc1x[i] + fc1y[i+di[1]] * gc1x[i+di[1]]))
         end
-    elseif RI == 3 && RJ == D - RI
-        if D == 3
-            fc = f[Tuple(1:D)]
-            gc = g[()]
-            rdom = makestaggered(dom, Vec(ntuple(d->true, D)))
-            rc = Array{U}(undef, rdom.n.elts)
-            for i in CartesianIndices(size(rc))
-                rc[i] = fc[i] * gc[i]
-            end
-            Form(Dict(Tuple(1:D) => Fun(rdom, rc)))
-        else
-            @assert false
+        Form(Dict(Tuple(1:D) => Fun(rdom2xy, rc2xy)))
+    elseif D == 3 && RI == 1 && RJ == 2
+        fc1x = f[(1,)]
+        fc1y = f[(2,)]
+        fc1z = f[(3,)]
+        gc2xy = g[(1,2)]
+        gc2xz = g[(1,3)]
+        gc2yz = g[(2,3)]
+        rdom3xyz = makestaggered(dom, trues(Vec{D,Bool}))
+        rc3xyz = Array{U}(undef, rdom3xyz.n.elts)
+        for i in CartesianIndices(size(rc3xyz))
+            rc3xyz[i] = U(1)/4 *
+                (+ (+ fc1x[i] * gc2yz[i]
+                    + fc1x[i+di[2]] * gc2yz[i+di[2]]
+                    + fc1x[i+di[3]] * gc2yz[i+di[3]]
+                    + fc1x[i+di[2]+di[3]] * gc2yz[i+di[2]+di[3]])
+                 - (+ fc1y[i] * gc2xz[i]
+                    + fc1y[i+di[1]] * gc2xz[i+di[1]]
+                    + fc1y[i+di[3]] * gc2xz[i+di[3]]
+                    + fc1y[i+di[1]+di[3]] * gc2xz[i+di[1]+di[3]])
+                 + (+ fc1z[i] * gc2xy[i]
+                    + fc1z[i+di[1]] * gc2xy[i+di[1]]
+                    + fc1z[i+di[2]] * gc2xy[i+di[2]]
+                    + fc1z[i+di[1]+di[2]] * gc2xy[i+di[1]+di[2]]))
         end
-    elseif RI == 4 && RJ == D - RI
-        if D == 4
-            fc = f[Tuple(1:D)]
-            gc = g[()]
-            rdom = makestaggered(dom, Vec(ntuple(d->true, D)))
-            rc = Array{U}(undef, rdom.n.elts)
-            for i in CartesianIndices(size(rc))
-                rc[i] = fc[i] * gc[i]
-            end
-            Form(Dict(Tuple(1:D) => Fun(rdom, rc)))
-        else
-            @assert false
+        Form(Dict(Tuple(1:D) => Fun(rdom3xyz, rc3xyz)))
+    elseif D == 3 && RI == 2 && RJ == 1
+        fc2xy = f[(1,2)]
+        fc2xz = f[(1,3)]
+        fc2yz = f[(2,3)]
+        gc1x = g[(1,)]
+        gc1y = g[(2,)]
+        gc1z = g[(3,)]
+        rdom3xyz = makestaggered(dom, trues(Vec{D,Bool}))
+        rc3xyz = Array{U}(undef, rdom3xyz.n.elts)
+        for i in CartesianIndices(size(rc3xyz))
+            rc3xyz[i] = U(1)/2 *
+                (+ (+ fc2xy[i] * gc1z[i]
+                    + fc2xy[i+di[3]] * gc1z[i+di[3]])
+                 - (+ fc2xz[i] * gc1y[i]
+                    + fc2xz[i+di[2]] * gc1y[i+di[2]])
+                 + (+ fc2yz[i] * gc1x[i]
+                    + fc2yz[i+di[1]] * gc1x[i+di[1]]))
         end
+        Form(Dict(Tuple(1:D) => Fun(rdom3xyz, rc3xyz)))
+    elseif D == 4 && RI == 1 && RJ == 3
+        fc1x = f[(1,)]
+        fc1y = f[(2,)]
+        fc1z = f[(3,)]
+        fc1t = f[(4,)]
+        gc3xyz = g[(1,2,3)]
+        gc3xyt = g[(1,2,4)]
+        gc3xzt = g[(1,3,4)]
+        gc3yzt = g[(2,3,4)]
+        rdom4xyzt = makestaggered(dom, trues(Vec{D,Bool}))
+        rc4xyzt = Array{U}(undef, rdom4xyzt.n.elts)
+        for i in CartesianIndices(size(rc4xyzt))
+            rc4xyzt[i] = U(1)/8 *
+                (+ (+ fc1x[i] * gc3yzt[i]
+                    + fc1x[i+di[2]] * gc3yzt[i+di[2]]
+                    + fc1x[i+di[3]] * gc3yzt[i+di[3]]
+                    + fc1x[i+di[2]+di[3]] * gc3yzt[i+di[2]+di[3]]
+                    + fc1x[i+di[4]] * gc3yzt[i+di[4]]
+                    + fc1x[i+di[2]+di[4]] * gc3yzt[i+di[2]+di[4]]
+                    + fc1x[i+di[3]+di[4]] * gc3yzt[i+di[3]+di[4]]
+                    + fc1x[i+di[2]+di[3]+di[4]] * gc3yzt[i+di[2]+di[3]+di[4]])
+                 - (+ fc1y[i] * gc3xzt[i]
+                    + fc1y[i+di[1]] * gc3xzt[i+di[1]]
+                    + fc1y[i+di[3]] * gc3xzt[i+di[3]]
+                    + fc1y[i+di[1]+di[3]] * gc3xzt[i+di[1]+di[3]]
+                    + fc1y[i+di[4]] * gc3xzt[i+di[4]]
+                    + fc1y[i+di[1]+di[4]] * gc3xzt[i+di[1]+di[4]]
+                    + fc1y[i+di[3]+di[4]] * gc3xzt[i+di[3]+di[4]]
+                    + fc1y[i+di[1]+di[3]+di[4]] * gc3xzt[i+di[1]+di[3]+di[4]])
+                 + (+ fc1z[i] * gc3xyt[i]
+                    + fc1z[i+di[1]] * gc3xyt[i+di[1]]
+                    + fc1z[i+di[2]] * gc3xyt[i+di[2]]
+                    + fc1z[i+di[1]+di[2]] * gc3xyt[i+di[1]+di[2]]
+                    + fc1z[i+di[4]] * gc3xyt[i+di[4]]
+                    + fc1z[i+di[1]+di[4]] * gc3xyt[i+di[1]+di[4]]
+                    + fc1z[i+di[2]+di[4]] * gc3xyt[i+di[2]+di[4]]
+                    + fc1z[i+di[1]+di[2]+di[4]] * gc3xyt[i+di[1]+di[2]+di[4]])
+                 - (+ fc1t[i] * gc3xyz[i]
+                    + fc1t[i+di[1]] * gc3xyz[i+di[1]]
+                    + fc1t[i+di[2]] * gc3xyz[i+di[2]]
+                    + fc1t[i+di[1]+di[2]] * gc3xyz[i+di[1]+di[2]]
+                    + fc1t[i+di[3]] * gc3xyz[i+di[3]]
+                    + fc1t[i+di[1]+di[3]] * gc3xyz[i+di[1]+di[3]]
+                    + fc1t[i+di[2]+di[3]] * gc3xyz[i+di[2]+di[3]]
+                    + fc1t[i+di[1]+di[2]+di[3]] * gc3xyz[i+di[1]+di[2]+di[3]]))
+        end
+        Form(Dict(Tuple(1:D) => Fun(rdom4xyzt, rc4xyzt)))
+    elseif D == 4 && RI == 2 && RJ == 2
+        fc2xy = f[(1,2)]
+        fc2xz = f[(1,3)]
+        fc2xt = f[(1,4)]
+        fc2yz = f[(2,3)]
+        fc2yt = f[(2,4)]
+        fc2zt = f[(3,4)]
+        gc2xy = g[(1,2)]
+        gc2xz = g[(1,3)]
+        gc2xt = g[(1,4)]
+        gc2yz = g[(2,3)]
+        gc2yt = g[(2,4)]
+        gc2zt = g[(3,4)]
+        rdom4xyzt = makestaggered(dom, trues(Vec{D,Bool}))
+        rc4xyzt = Array{U}(undef, rdom4xyzt.n.elts)
+        for i in CartesianIndices(size(rc4xyzt))
+            rc4xyzt[i] = U(1)/4 *
+                (+ (+ fc2xy[i] * gc2zt[i]
+                    + fc2xy[i+di[3]] * gc2zt[i+di[3]]
+                    + fc2xy[i+di[4]] * gc2zt[i+di[4]]
+                    + fc2xy[i+di[3]+di[4]] * gc2zt[i+di[3]+di[4]])
+                 - (+ fc2xz[i] * gc2yt[i]
+                    + fc2xz[i+di[2]] * gc2yt[i+di[2]]
+                    + fc2xz[i+di[4]] * gc2yt[i+di[4]]
+                    + fc2xz[i+di[2]+di[4]] * gc2yt[i+di[2]+di[4]])
+                 + (+ fc2xt[i] * gc2yz[i]
+                    + fc2xt[i+di[2]] * gc2yz[i+di[2]]
+                    + fc2xt[i+di[3]] * gc2yz[i+di[3]]
+                    + fc2xt[i+di[2]+di[3]] * gc2yz[i+di[2]+di[3]])
+                 + (+ fc2yz[i] * gc2xt[i]
+                    + fc2yz[i+di[1]] * gc2xt[i+di[1]]
+                    + fc2yz[i+di[4]] * gc2xt[i+di[4]]
+                    + fc2yz[i+di[1]+di[4]] * gc2xt[i+di[1]+di[4]])
+                 - (+ fc2yt[i] * gc2xz[i]
+                    + fc2yt[i+di[1]] * gc2xz[i+di[1]]
+                    + fc2yt[i+di[3]] * gc2xz[i+di[3]]
+                    + fc2yt[i+di[1]+di[3]] * gc2xz[i+di[1]+di[3]])
+                 + (+ fc2zt[i] * gc2xy[i]
+                    + fc2zt[i+di[1]] * gc2xy[i+di[1]]
+                    + fc2zt[i+di[2]] * gc2xy[i+di[2]]
+                    + fc2zt[i+di[1]+di[2]] * gc2xy[i+di[1]+di[2]]))
+        end
+        Form(Dict(Tuple(1:D) => Fun(rdom4xyzt, rc4xyzt)))
+    elseif D == 4 && RI == 3 && RJ == 1
+        fc3xyz = f[(1,2,3)]
+        fc3xyt = f[(1,2,4)]
+        fc3xzt = f[(1,3,4)]
+        fc3yzt = f[(2,3,4)]
+        gc1x = g[(1,)]
+        gc1y = g[(2,)]
+        gc1z = g[(3,)]
+        gc1t = g[(4,)]
+        rdom4xyzt = makestaggered(dom, trues(Vec{D,Bool}))
+        rc4xyzt = Array{U}(undef, rdom4xyzt.n.elts)
+        for i in CartesianIndices(size(rc4xyzt))
+            rc4xyzt[i] = U(1)/2 *
+                (+ (+ fc3xyz[i] * gc1t[i]
+                    + fc3xyz[i+di[4]] * gc1t[i+di[4]])
+                 - (+ fc3xyt[i] * gc1z[i]
+                    + fc3xyt[i+di[3]] * gc1z[i+di[3]])
+                 + (+ fc3xzt[i] * gc1y[i]
+                    + fc3xzt[i+di[2]] * gc1y[i+di[2]])
+                 - (+ fc3yzt[i] * gc1x[i]
+                    + fc3yzt[i+di[1]] * gc1x[i+di[1]]))
+        end
+        Form(Dict(Tuple(1:D) => Fun(rdom4xyzt, rc4xyzt)))
     else
         @assert false
     end

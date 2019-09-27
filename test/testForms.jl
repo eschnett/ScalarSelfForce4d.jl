@@ -103,15 +103,15 @@ function testForms()
     #TODO     end
     #TODO end
 
-    @testset "Forms.Wedge D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in [false]   # false:true
+    @testset "Forms.Wedge D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in [false]
         dom = Domain{D,BigRat}(3, lorentzian=lorentzian)
         for RI in 0:D, RJ in 0:D - RI, DualI in false:true, DualJ in false:true
             f0 = zeros(Form{D,RI,DualI,BigRat,BigRat}, dom)
             g0 = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
 
-            NEXT STEP ALLOW DUALJ
-
-            (!DualI && !DualJ) || continue
+            # we test all primal-primal as well as certain primal-dual
+            # operations
+            (!DualI && !DualJ) || (!DualI && DualJ && RI + RJ == D) || continue
 
             # Unit vectors
             for (i,fi) in f0.comps, (j,gj) in g0.comps
@@ -156,147 +156,32 @@ function testForms()
                 @test isequal(wedge(f + f2, g), wedge(f, g) + wedge(f2, g))
                 @test isequal(wedge(f, g + g2), wedge(f, g) + wedge(f, g2))
 
-                # Note: the discrete wedge is not associative
+                # Note: the discrete primal-primal wedge is not associative
+
+                # TODO: Leibniz rule
+                # TODO: associative for closed forms
+                # TODO: natural under pullbacks
 
                 # Antisymmetry
-                if RJ == RI && isodd(RI)
-                    @test iszero(wedge(f, f))
+                if DualI == DualJ
+                    if RJ == RI && isodd(RI)
+                        @test iszero(wedge(f, f))
+                    end
+                    s = BigRat(bitsign(RI * RJ))
+                    @test isequal(wedge(g, f), s * wedge(f, g))
                 end
-                s = BigRat(bitsign(RI * RJ))
-                @test isequal(wedge(g, f), s * wedge(f, g))
             end
         end
     end
 
-    @testset "Forms.Wedge D=$D" for D in 1:4
-        dom = Domain{D,BigRat}(3)
-        for R in 1:1
-            for dir in 1:D
-                domf = makestaggered(dom, unitvec(Val(D), dir))
-                domg = makedual(dom, true)
-                domh = makestaggered(dom, Vec{D,Bool}(ntuple(d->true, D)))
-                f = zeros(Form{D,R,false,BigRat,BigRat}, domf)
-                g = zeros(Form{D,D - R,true,BigRat,BigRat}, domg)
-                h = zeros(Form{D,D,false,BigRat,BigRat}, domh)
-                idxf = Vec{1,Int}((dir,))
-                idxg = Vec{D - 1,Int}(Tuple(filter(!=(dir), 1:D)))
-                idxh = Vec{D,Int}(Tuple(1:D))
-                s = levicivita([idxf..., idxg...])
-                f.comps[idxf] = fconst(f[idxf].dom, BigRat(1))
-                g.comps[idxg] = fconst(g[idxg].dom, BigRat(1))
-                h.comps[idxh] = fconst(h[idxh].dom, BigRat(1))
-                @test wedge(f, g) == BigRat(s) * h
-
-                RI = R
-                DualI = false
-                icomps = Dict{Vec{RI,Int},Fun{D,BigRat,BigRat}}()
-                for staggeredc in CartesianIndices(ntuple(d->0:1, D))
-                    staggered = Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
-                    if count(staggered) == RI
-                        idx = Vec{RI,Int}(Tuple(staggered2idx(staggered)))
-                        fdom = makestaggered(makedual(dom, DualI), staggered)
-                        fvals = BigRat.(rand(-100:100, fdom.n.elts))
-                        fun = Fun{D,BigRat,BigRat}(fdom, fvals)
-                        icomps[idx] = fun
-                    end
-                end
-                f = Form(icomps)
-    
-                icomps = Dict{Vec{RI,Int},Fun{D,BigRat,BigRat}}()
-                for staggeredc in CartesianIndices(ntuple(d->0:1, D))
-                    staggered = Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
-                    if count(staggered) == RI
-                        idx = Vec{RI,Int}(Tuple(staggered2idx(staggered)))
-                        fdom = makestaggered(makedual(dom, DualI), staggered)
-                        fvals = BigRat.(rand(-100:100, fdom.n.elts))
-                        fun = Fun{D,BigRat,BigRat}(fdom, fvals)
-                        icomps[idx] = fun
-                    end
-                end
-                f2 = Form(icomps)
-    
-                RJ = D - R
-                DualJ = true
-                jcomps = Dict{Vec{RJ,Int},Fun{D,BigRat,BigRat}}()
-                for staggeredc in CartesianIndices(ntuple(d->0:1, D))
-                    staggered = Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
-                    if count(staggered) == RJ
-                        idx = Vec{RJ,Int}(Tuple(staggered2idx(staggered)))
-                        fdom = makestaggered(makedual(dom, DualJ), staggered)
-                        fvals = BigRat.(rand(-100:100, fdom.n.elts))
-                        fun = Fun{D,BigRat,BigRat}(fdom, fvals)
-                        jcomps[idx] = fun
-                    end
-                end
-                g = Form(jcomps)
-    
-                jcomps = Dict{Vec{RJ,Int},Fun{D,BigRat,BigRat}}()
-                for staggeredc in CartesianIndices(ntuple(d->0:1, D))
-                    staggered = Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
-                    if count(staggered) == RJ
-                        idx = Vec{RJ,Int}(Tuple(staggered2idx(staggered)))
-                        fdom = makestaggered(makedual(dom, DualJ), staggered)
-                        fvals = BigRat.(rand(-100:100, fdom.n.elts))
-                        fun = Fun{D,BigRat,BigRat}(fdom, fvals)
-                        jcomps[idx] = fun
-                    end
-                end
-                g2 = Form(jcomps)
-    
-                a = BigRat(rand(-100:100))
-    
-                @test isequal(wedge(a * f, g), a * wedge(f, g))
-                @test isequal(wedge(f, a * g), a * wedge(f, g))
-                @test isequal(wedge(f + f2, g), wedge(f, g) + wedge(f2, g))
-                @test isequal(wedge(f, g + g2), wedge(f, g) + wedge(f, g2))
-                # if 2*RI <= D && RI > 0
-                #     @test iszero(wedge(f, f))
-                # end
-                # @test isequal(wedge(g, f),
-                #               BigRat(bitsign(RI * RJ)) * wedge(f, g))
-
-            end
-        end
-    end
-
-    @testset "Forms.Star D=$D" for D in 1:4
-        atol = 100 * eps(1.0)
-    
-        R = 0
-        sfsinpiD = star(fsinpi(D))
-        ssfsinpiD = star(sfsinpiD)
-        sssfsinpiD = star(ssfsinpiD)
-        scale = bitsign(R * (D - R))
-        maxerr = norm(fsinpi(D)[()] - scale * ssfsinpiD[()], Inf)
-        @test isapprox(maxerr, 0; atol = atol)
-        sidx = ntuple(d->d, D)
-        maxerr = norm(sfsinpiD[sidx] - scale * sssfsinpiD[sidx], Inf)
-        @test isapprox(maxerr, 0; atol = atol)
-
-        R = 1
-        sdfsinpiD = star(dfsinpi(D))
-        ssdfsinpiD = star(sdfsinpiD)
-        sssdfsinpiD = star(ssdfsinpiD)
-        scale = bitsign(R * (D - R))
-        for dir in 1:D
-            maxerr = norm(dfsinpi(D)[(dir,)] - scale * ssdfsinpiD[(dir,)], Inf)
-            @test isapprox(maxerr, 0; atol = atol)
-            sidx = ntuple(d->d < dir ? d : d + 1, D - 1)
-            maxerr = norm(sdfsinpiD[sidx] - scale * sssdfsinpiD[sidx], Inf)
-            @test isapprox(maxerr, 0; atol = atol)
-        end
-
-        for R in 0:D, lorentzian in false:true
-            dom = Domain{D,BigRat}(3, lorentzian=lorentzian)
-            f = zeros(Form{D,R,false,BigRat,BigRat}, dom)
-            for (i,fi) in f.comps
-                fc = BigRat.(rand(-100:100, fi.dom.n.elts))
-                f.comps[i] = Fun{D,BigRat,BigRat}(fi.dom, fc)
-            end
+    @testset "Forms.Star D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in false:true
+        dom = Domain{D,BigRat}(3, lorentzian=lorentzian)
+        for R in 0:D, Dual in false:true
+            f = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
             sf = star(f)
             ssf = star(sf)
-            scale = bitsign(R * (D - R)) * bitsign(lorentzian)
-            @test f == BigRat(scale) * ssf
+            s = bitsign(R * (D - R)) * bitsign(lorentzian)
+            @test f == BigRat(s) * ssf
         end
     end
 
