@@ -22,16 +22,13 @@ end
     end
 end
 
-dom = Domain{2,Float64}(65, lorentzian=true)
+dom = Domain{2,Float64}(17, lorentzian=true)
 
 phi = Form(Dict(() => approximate(waveD, dom)))
 plot((x,t) -> phi[()](Vec((x,t))), -1, 1, 0, 1)
 
 dphi = deriv(phi)
-sdphi = star(dphi)
-# Note: The action has a sign error because the metric signature is
-# not yet handled properly
-act = wedge(dphi, sdphi) / 2.0
+act = - wedge(dphi, star(dphi)) / 2.0
 plot((x,t) -> act[(1,2)](Vec((x,t))), -1, 1, 0, 1)
 
 ex = Form(Dict(() => approximate(xt -> xt[1], dom)))
@@ -42,16 +39,14 @@ nt = deriv(et)
 phit = wedge(dphi, star(nt))
 phix = wedge(dphi, star(nx))
 
-phix2 = wedge(phix, star(phix))
-phit2 = wedge(phit, star(phit))
+phix2 = - wedge(phix, star(phix))
+phit2 = - wedge(phit, star(phit))
 ene = (phix2 + phit2) / 2.0
-# hstack(
-#     plot((x,t) -> phix2[(1,2)](Vec((x,t))), -1, 1, 0, 1),
-#     plot((x,t) -> phit2[(1,2)](Vec((x,t))), -1, 1, 0, 1),
-# )
 plot((x,t) -> ene[(1,2)](Vec((x,t))), -1, 1, 0, 1)
-# plot(x -> ene[(1,2)](Vec((x,0.5))), -1, 1)
 
-# mom = phit
-# ham = wedge(mom, star(mom)) - act
-# plot((x,t) -> ham[(1,2)](Vec((x,t))), -1, 1, 0, 1)
+mom = phit
+mom2 = - wedge(mom, star(mom))
+ham = mom2 - act
+plot((x,t) -> ham[(1,2)](Vec((x,t))), -1, 1, 0, 1)
+
+[sum(ham[(1,2)].coeffs[:,i]) for i in 1:8]

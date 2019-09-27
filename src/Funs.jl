@@ -365,4 +365,23 @@ function approximate_delta(dom::Domain{D,T}, x::Vec{D,T})::Fun{D,T,T} where
     Fun{D,T,T}(dom, cs)
 end
 
+
+
+export sample
+function sample(fun, dom::Domain{D,T})::Fun{D,T} where {D,T <: Number}
+    U = typeof(fun(dom.xmin))
+
+    di = Vec(ntuple(d -> dom.staggered[d] ? T(1)/2 : T(0), D))
+    dx = spacing(dom)
+    w = prod(dom.staggered[d] ? dx[d] : T(1) for d in 1:D)
+
+    fs = Array{U,D}(undef, dom.n.elts)
+    for ic in CartesianIndices(size(fs))
+        i = Vec(ic.I) .- 1
+        x = coord(dom, i + di)
+        fs[ic] = w * fun(x)
+    end
+    return Fun{D,T,U}(dom, fs)
+end
+
 end

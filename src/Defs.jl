@@ -3,6 +3,39 @@ Miscallaneous utilities
 """
 module Defs
 
+using Base.Order
+
+
+
+export @swap!
+macro swap!(x, y)
+    quote
+      $(esc(x)), $(esc(y)) = $(esc(y)), $(esc(x))
+    end
+end
+
+
+
+export isstrictlysorted
+function isstrictlysorted(itr, order::Ordering)
+    y = iterate(itr)
+    y === nothing && return true
+    this, state = y
+    while true
+        y = iterate(itr, state)
+        y === nothing && return true
+        prev = this
+        this, state = y
+        lt(order, prev, this) || return false
+    end
+end
+function isstrictlysorted(itr;
+                          lt=isless, by=identity,
+                          rev::Union{Bool,Nothing}=nothing,
+                          order::Ordering=Forward)
+    isstrictlysorted(itr, ord(lt,by,rev,order))
+end
+
 
 
 export bitsign

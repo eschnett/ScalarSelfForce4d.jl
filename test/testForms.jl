@@ -42,133 +42,129 @@ end
 function testForms()
 
     BigRat = Rational{BigInt}
+    bigrange = -10 : big(1//10) : 10
 
-    for D in 1:3
-        for R in 0:D
-            for Dual in false:true
-                dom = Domain{D,BigRat}(3)
-                z = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
-                as = [BigRat(rand(-100:100)) for i in 1:10]
-                xs = Form{D,R,Dual,BigRat,BigRat}[]
-                for i in 1:10
-                    comps = Dict{Vec{R,Int},Fun{D,BigRat,BigRat}}()
-                    for staggeredc in CartesianIndices(ntuple(d->0:1, D))
-                        staggered =
-                            Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
-                        if count(staggered) == R
-                            idx = Vec{R,Int}(Tuple(staggered2idx(staggered)))
-                            fdom = makestaggered(makedual(dom, Dual), staggered)
-                            fvals = BigRat.(rand(-100:100, fdom.n.elts))
-                            fun = Fun{D,BigRat,BigRat}(fdom, fvals)
-                            comps[idx] = fun
+    #TODO # Forms form a vector space
+    #TODO for D in 1:4, lorentzian in [false]    # false:true
+    #TODO     dom = Domain{D,BigRat}(3, lorentzian=lorentzian)
+    #TODO     for R in 0:D, Dual in false:true
+    #TODO         z = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
+    #TODO         as = [rand(bigrange) for i in 1:10]
+    #TODO         xs = [rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
+    #TODO               for i in 1:10]
+    #TODO         testVectorspace(z, as, xs, isequal)
+    #TODO     end
+    #TODO end
+    #TODO 
+    #TODO # Operators form a vector space
+    #TODO for D in 1:4, lorentzian in [false]   # false:true
+    #TODO     dom = Domain{D,BigRat}(3, lorentzian=lorentzian)
+    #TODO     for RI in 0:D, DualI in false:true
+    #TODO         for RJ in 0:D, DualJ in false:true
+    #TODO             z = zeros(FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat})
+    #TODO             xs = FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat}[]
+    #TODO             if RI == RJ && DualI == DualJ
+    #TODO                 push!(xs, one(FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat}, dom))
+    #TODO             end
+    #TODO             if RI == D - RJ && DualI == !DualJ
+    #TODO                 push!(xs, star(Val(RJ), Val(DualJ), dom))
+    #TODO             end
+    #TODO             if RI == RJ + 1 && DualI == DualJ
+    #TODO                 push!(xs, deriv(Val(RJ), Val(DualJ), dom))
+    #TODO             end
+    #TODO             if RI == D - (RJ + 1) && DualI == !DualJ
+    #TODO                 d = deriv(Val(RJ), Val(DualJ), dom)
+    #TODO                 s = star(Val(RJ + 1), Val(DualJ), dom)
+    #TODO                 push!(xs, s * d)
+    #TODO             end
+    #TODO             if RI == (D - RJ) + 1 && DualI == !DualJ
+    #TODO                 s = star(Val(RJ), Val(DualJ), dom)
+    #TODO                 d = deriv(Val(D - RJ), Val(!DualJ), dom)
+    #TODO                 push!(xs, d * s)
+    #TODO             end
+    #TODO             if RI == RJ - 1 && DualI == DualJ
+    #TODO                 push!(xs, coderiv(Val(RJ), Val(DualJ), dom))
+    #TODO             end
+    #TODO             if RI == D - (RJ - 1) && DualI == !DualJ
+    #TODO                 c = coderiv(Val(RJ), Val(DualJ), dom)
+    #TODO                 s = star(Val(RJ - 1), Val(DualJ), dom)
+    #TODO                 push!(xs, s * c)
+    #TODO             end
+    #TODO             if RI == (D - RJ) - 1 && DualI == !DualJ
+    #TODO                 s = star(Val(RJ), Val(DualJ), dom)
+    #TODO                 c = coderiv(Val(D - RJ), Val(!DualJ), dom)
+    #TODO                 push!(xs, c * s)
+    #TODO             end
+    #TODO             if !isempty(xs)
+    #TODO                 as = [rand(bigrange) for i in 1:10]
+    #TODO                 testVectorspace(z, as, xs, isequal)
+    #TODO             end
+    #TODO         end
+    #TODO     end
+    #TODO end
+
+    @testset "Forms.Wedge D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in [false]   # false:true
+        dom = Domain{D,BigRat}(3, lorentzian=lorentzian)
+        for RI in 0:D, RJ in 0:D - RI, DualI in false:true, DualJ in false:true
+            f0 = zeros(Form{D,RI,DualI,BigRat,BigRat}, dom)
+            g0 = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
+
+            NEXT STEP ALLOW DUALJ
+
+            (!DualI && !DualJ) || continue
+
+            # Unit vectors
+            for (i,fi) in f0.comps, (j,gj) in g0.comps
+                istag = idx2staggered(Val(D), i)
+                jstag = idx2staggered(Val(D), j)
+                if any(istag & jstag)
+                    s = 0
+                else
+                    ij = Int[i..., j...]
+                    s = 1
+                    while !isempty(ij)
+                        y,x = findmin(ij)
+                        if iseven(x)
+                            s = -s
                         end
+                        deleteat!(ij, x)
                     end
-                    f = Form(comps)
-                    push!(xs, f)
                 end
-                testVectorspace(z, as, xs, isequal)
+                k = Vec{RI+RJ,Int}(Tuple(sort(Int[i..., j...])))
+                f = zeros(Form{D,RI,DualI,BigRat,BigRat}, dom)
+                g = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
+                h = zeros(Form{D,RI+RJ,false,BigRat,BigRat}, dom)
+                f.comps[i] = fconst(f.comps[i].dom, BigRat(1))
+                g.comps[j] = fconst(g.comps[j].dom, BigRat(1))
+                if s != 0
+                    h.comps[k] = fconst(h.comps[k].dom, BigRat(s))
+                end
+                r = wedge(f, g)
+                @test r == h
             end
-        end
-    end
-    
-    for D in 1:3, lorentzian in false:true
-        for RI in 0:D, DualI in false:true
-            for RJ in 0:D, DualJ in false:true
-                dom = Domain{D,BigRat}(3, lorentzian = lorentzian)
-                z = zeros(FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat})
-                xs = FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat}[]
-                if RI == RJ && DualI == DualJ
-                    push!(xs, one(FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat}, dom))
-                end
-                if RI == D - RJ && DualI == !DualJ
-                    push!(xs, star(Val(RJ), Val(DualJ), dom))
-                end
-                if RI == RJ + 1 && DualI == DualJ
-                    push!(xs, deriv(Val(RJ), Val(DualJ), dom))
-                end
-                if RI == D - (RJ + 1) && DualI == !DualJ
-                    d = deriv(Val(RJ), Val(DualJ), dom)
-                    s = star(Val(RJ + 1), Val(DualJ), dom)
-                    push!(xs, s * d)
-                end
-                if RI == (D - RJ) + 1 && DualI == !DualJ
-                    s = star(Val(RJ), Val(DualJ), dom)
-                    d = deriv(Val(D - RJ), Val(!DualJ), dom)
-                    push!(xs, d * s)
-                end
-                if RI == RJ - 1 && DualI == DualJ
-                    push!(xs, coderiv(Val(RJ), Val(DualJ), dom))
-                end
-                if RI == D - (RJ - 1) && DualI == !DualJ
-                    c = coderiv(Val(RJ), Val(DualJ), dom)
-                    s = star(Val(RJ - 1), Val(DualJ), dom)
-                    push!(xs, s * c)
-                end
-                if RI == (D - RJ) - 1 && DualI == !DualJ
-                    s = star(Val(RJ), Val(DualJ), dom)
-                    c = coderiv(Val(D - RJ), Val(!DualJ), dom)
-                    push!(xs, c * s)
-                end
-                if !isempty(xs)
-                    as = [BigRat(rand(-100:100)) for i in 1:10]
-                    testVectorspace(z, as, xs, isequal)
-                end
-            end
-        end
-    end
 
-    @testset "Forms.Wedge D=$D" for D in 1:2 # :4
-        dom = Domain{D,BigRat}(3)
-    
-        if D >= 2
-            for dir1 in 1:D, dir2 in dir1 + 1:D, Dual in [false] # false:true
-                f = zeros(Form{D,1,Dual,BigRat,BigRat}, dom)
-                g = zeros(Form{D,1,Dual,BigRat,BigRat}, dom)
-                h = zeros(Form{D,2,Dual,BigRat,BigRat}, dom)
-                f.comps[Vec{1,Int}((dir1,))] = fconst(f[(dir1,)].dom, BigRat(1))
-                g.comps[Vec{1,Int}((dir2,))] = fconst(g[(dir2,)].dom, BigRat(1))
-                h.comps[Vec{2,Int}((dir1, dir2))] =
-                    fconst(h[(dir1, dir2)].dom, BigRat(1))
-                @test wedge(f, g) == h
-            end
-        end
+            for n in 1:10
+                a = rand(bigrange)
+                f = rand(bigrange, Form{D,RI,DualI,BigRat,BigRat}, dom)
+                f2 = rand(bigrange, Form{D,RI,DualI,BigRat,BigRat}, dom)
+                g = rand(bigrange, Form{D,RJ,DualJ,BigRat,BigRat}, dom)
+                g2 = rand(bigrange, Form{D,RJ,DualJ,BigRat,BigRat}, dom)
 
-        for RI in 0:D, RJ in 0:D - RI, Dual in [false] # false:true
-    
-            icomps = Dict{Vec{RI,Int},Fun{D,BigRat,BigRat}}()
-            for staggeredc in CartesianIndices(ntuple(d->0:1, D))
-                staggered = Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
-                if count(staggered) == RI
-                    idx = Vec{RI,Int}(Tuple(staggered2idx(staggered)))
-                    fdom = makestaggered(makedual(dom, Dual), staggered)
-                    fvals = BigRat.(rand(-100:100, fdom.n.elts))
-                    fun = Fun{D,BigRat,BigRat}(fdom, fvals)
-                    icomps[idx] = fun
+                # Linearity
+                @test isequal(wedge(a * f, g), a * wedge(f, g))
+                @test isequal(wedge(f, a * g), a * wedge(f, g))
+                @test isequal(wedge(f + f2, g), wedge(f, g) + wedge(f2, g))
+                @test isequal(wedge(f, g + g2), wedge(f, g) + wedge(f, g2))
+
+                # Note: the discrete wedge is not associative
+
+                # Antisymmetry
+                if RJ == RI && isodd(RI)
+                    @test iszero(wedge(f, f))
                 end
+                s = BigRat(bitsign(RI * RJ))
+                @test isequal(wedge(g, f), s * wedge(f, g))
             end
-            f = Form(icomps)
-    
-            jcomps = Dict{Vec{RJ,Int},Fun{D,BigRat,BigRat}}()
-            for staggeredc in CartesianIndices(ntuple(d->0:1, D))
-                staggered = Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
-                if count(staggered) == RJ
-                    idx = Vec{RJ,Int}(Tuple(staggered2idx(staggered)))
-                    fdom = makestaggered(makedual(dom, Dual), staggered)
-                    fvals = BigRat.(rand(-100:100, fdom.n.elts))
-                    fun = Fun{D,BigRat,BigRat}(fdom, fvals)
-                    jcomps[idx] = fun
-                end
-            end
-            g = Form(jcomps)
-    
-            a = BigRat(rand(-100:100))
-    
-            @test isequal(wedge(a * f, g), a * wedge(f, g))
-            @test isequal(wedge(f, a * g), a * wedge(f, g))
-            if 2 * RI <= D && RI > 0
-                @test iszero(wedge(f, f))
-            end
-            @test isequal(wedge(g, f), BigRat(bitsign(RI * RJ)) * wedge(f, g))
         end
     end
 
@@ -266,26 +262,41 @@ function testForms()
     @testset "Forms.Star D=$D" for D in 1:4
         atol = 100 * eps(1.0)
     
+        R = 0
         sfsinpiD = star(fsinpi(D))
         ssfsinpiD = star(sfsinpiD)
         sssfsinpiD = star(ssfsinpiD)
-        scale = bitsign(0 * (D - 0))
+        scale = bitsign(R * (D - R))
         maxerr = norm(fsinpi(D)[()] - scale * ssfsinpiD[()], Inf)
         @test isapprox(maxerr, 0; atol = atol)
         sidx = ntuple(d->d, D)
         maxerr = norm(sfsinpiD[sidx] - scale * sssfsinpiD[sidx], Inf)
         @test isapprox(maxerr, 0; atol = atol)
-    
+
+        R = 1
         sdfsinpiD = star(dfsinpi(D))
         ssdfsinpiD = star(sdfsinpiD)
         sssdfsinpiD = star(ssdfsinpiD)
-        scale = bitsign(1 * (D - 1))
+        scale = bitsign(R * (D - R))
         for dir in 1:D
             maxerr = norm(dfsinpi(D)[(dir,)] - scale * ssdfsinpiD[(dir,)], Inf)
             @test isapprox(maxerr, 0; atol = atol)
             sidx = ntuple(d->d < dir ? d : d + 1, D - 1)
             maxerr = norm(sdfsinpiD[sidx] - scale * sssdfsinpiD[sidx], Inf)
             @test isapprox(maxerr, 0; atol = atol)
+        end
+
+        for R in 0:D, lorentzian in false:true
+            dom = Domain{D,BigRat}(3, lorentzian=lorentzian)
+            f = zeros(Form{D,R,false,BigRat,BigRat}, dom)
+            for (i,fi) in f.comps
+                fc = BigRat.(rand(-100:100, fi.dom.n.elts))
+                f.comps[i] = Fun{D,BigRat,BigRat}(fi.dom, fc)
+            end
+            sf = star(f)
+            ssf = star(sf)
+            scale = bitsign(R * (D - R)) * bitsign(lorentzian)
+            @test f == BigRat(scale) * ssf
         end
     end
 
@@ -363,11 +374,12 @@ function testForms()
         end
 
         cdfsinpiD = coderiv(dfsinpi(D))
-        err = norm(cdfsinpiD[()] - sdsdfsinpiD[()], Inf)
+        s = Float64(bitsign(iseven(D) && isodd(D-1)))
+        err = norm(cdfsinpiD[()] - s * sdsdfsinpiD[()], Inf)
         @test isapprox(err, 0; atol = atol)
 
         lfsinpiD = laplace(fsinpi(D))
-        err = norm(lfsinpiD[()] - sdsdfsinpiD[()], Inf)
+        err = norm(lfsinpiD[()] - s * sdsdfsinpiD[()], Inf)
         @test isapprox(err, 0; atol = atol)
     end
 

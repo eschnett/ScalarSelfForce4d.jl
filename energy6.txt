@@ -1,0 +1,52 @@
+
+
+
+evolution:     *d*du = 0
+new variables: f     = du
+constraint:    df    = 0
+evolution:     *d*f  = 0
+
+constraint: dx ft - dt fx = 0
+evolution:  dx fx - dt ft = 0
+energy:     2E = fx^2 + ft^2
+
+constraint: fx[i,j+1] = fx[i,j] + ft[i+1,j] - ft[i,j]
+evolution:  ft[i,j+1] = ft[i,j] + fx[i+1,j] - fx[i,j]
+energy2:    4E2[i,j]  = ft[i,j]^2 + ft[i+1,j]^2 + fx[i,j]^2 + fx[i,j+1]^2
+energy0:    4E0[i,j]  = ft[i,j]^2 + ft[i,j-1]^2 + fx[i,j]^2 + fx[i-1,j]^2
+
+Dt energy0: dtE0[j] = ft[i,j+1]^2 - ft[i,j-1]^2 + 2 fx[i,j+1]^2 - 2 fx[i,j]^2
+                    = (ft[i,j] + fx[i+1,j] - fx[i,j])^2 - ft[i,j-1]^2 + 2 (ft[i,j] + fx[i+1,j] - fx[i,j])^2 - 2 fx[i,j]^2
+
+energy2:    4E2[i,j]  = ft[i,j]^2 + ft[i+1,j]^2 + fx[i,j]^2 + (fx[i,j] + ft[i+1,j] - ft[i,j])^2
+
+
+
+energy2:    4eps2[i,j]        = ft[i,j]^2 + ft[i+1,j]^2 + fx[i,j]^2 + fx[i,j+1]^2
+            4E2[j]            = ft[i,j]^2 + ft[i+1,j]^2 + fx[i,j]^2 + fx[i,j+1]^2
+                              = ft[i,j]^2 + ft[i+1,j]^2 + fx[i,j]^2 + fx[i,j+1]^2
+            4E2[j] - 4E2[j-1] = ft[i,j]^2 - ft[i,j-1]^2 + ft[i+1,j]^2 - ft[i+1,j-1]^2 + fx[i,j]^2 - fx[i,j-1]^2 + fx[i,j+1]^2 - fx[i,j]^2
+                              = (ft[i,j] + ft[i,j-1]) (ft[i,j] - ft[i,j-1]) + (ft[i+1,j] + ft[i+1,j-1]) (ft[i+1,j] - ft[i+1,j-1]) + (fx[i,j] + fx[i,j-1]) (fx[i,j] - fx[i,j-1]) + (fx[i,j+1] + fx[i,j]) (fx[i,j+1] - fx[i,j])
+                              = (ft[i,j] + ft[i,j-1]) (ft[i,j] - ft[i,j-1]) + (ft[i+1,j] + ft[i+1,j-1]) (ft[i+1,j] - ft[i+1,j-1]) + (fx[i,j] + fx[i,j-1]) (ft[i+1,j-1] - ft[i,j-1]) + (fx[i,j+1] + fx[i,j]) (ft[i+1,j] - ft[i,j])
+                              = (ft[i,j] + ft[i,j-1]) (ft[i,j] - ft[i,j-1]) + (ft[i+1,j] + ft[i+1,j-1]) (ft[i+1,j] - ft[i+1,j-1]) + (fx[i,j] + fx[i,j-1]) (ft[i+1,j-1] - ft[i,j-1]) + (fx[i,j+1] + fx[i,j]) (ft[i+1,j] - ft[i,j])
+                              = (ft[i,j] + ft[i,j-1]) (fx[i+1,j+1] - fx[i,j+1]) + (ft[i+1,j] + ft[i+1,j-1]) (fx[i+2,j+1] - fx[i+1,j+1]) + (fx[i,j] + fx[i,j-1]) (ft[i+1,j-1] - ft[i,j-1]) + (fx[i,j+1] + fx[i,j]) (ft[i+1,j] - ft[i,j])
+                              = (ft[i,j] + ft[i,j-1]) (fx[i+1,j+1] - fx[i,j+1]) + (ft[i,j] + ft[i,j-1]) (fx[i+1,j+1] - fx[i,j+1]) + (fx[i,j] + fx[i,j-1]) (ft[i+1,j-1] - ft[i,j-1]) + (fx[i,j+1] + fx[i,j]) (ft[i+1,j] - ft[i,j])
+
+
+
+2E  = int fx^2 + ft^2           time deriv
+dtE = int fx dtfx + ft dtft     constraint
+    = int fx dxft + ft dtft     evolution
+    = int fx dxft + ft dxfx
+
+
+
+energy0:    4eps0[i,j]        = ft[i,j]^2 + ft[i,j-1]^2 + fx[i,j]^2 + fx[i-1,j]^2
+            4E0[j]            = ft[i,j]^2 + ft[i,j-1]^2 + fx[i,j]^2 + fx[i-1,j]^2
+            4E0[j+1] - 4E0[j] = ft[i,j+1]^2 - ft[i,j]^2 + ft[i,j]^2 - ft[i,j-1]^2 + fx[i,j+1]^2 - fx[i,j]^2 + fx[i-1,j+1]^2 - fx[i-1,j]^2
+                              = (ft[i,j+1] + ft[i,j]) (ft[i,j+1] - ft[i,j]) + (ft[i,j] + ft[i,j-1]) (ft[i,j] - ft[i,j-1]) + (fx[i,j+1] + fx[i,j]) (fx[i,j+1] - fx[i,j]) + (fx[i-1,j+1] + fx[i-1,j]) (fx[i-1,j+1] - fx[i-1,j])
+                              = (ft[i,j+1] + ft[i,j]) (fx[i+1,j] - fx[i,j]) + (ft[i,j] + ft[i,j-1]) (fx[i+1,j-1] - fx[i,j-1]) + (fx[i,j+1] + fx[i,j]) (ft[i+1,j] - ft[i,j]) + (fx[i-1,j+1] + fx[i-1,j]) (ft[i,j] - ft[i-1,j])
+
+
+
+next idea: do 3+1 split, then use form laws to prove energy conservation

@@ -66,11 +66,12 @@ end
 function testFuns()
 
     BigRat = Rational{BigInt}
+    bigrange = -10 : big(1//10) : 10
     for D in 1:2
         dom = Domain{D,BigRat}(5)
         z = zeros(Fun{D,BigRat,BigRat}, dom)
-        as = [BigRat(rand(-100:100)) for i in 1:100]
-        xs = [Fun{D,BigRat,BigRat}(dom, BigRat.(rand(-100:100, dom.n.elts)))
+        as = [rand(bigrange) for i in 1:100]
+        xs = [Fun{D,BigRat,BigRat}(dom, rand(bigrange, dom.n.elts))
               for i in 1:100]
         testVectorspace(z, as, xs, isequal)
     end

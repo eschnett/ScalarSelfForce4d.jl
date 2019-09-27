@@ -2,6 +2,7 @@ using ScalarSelfForce4d.Domains
 
 using Arpack
 using DataStructures
+using LinearAlgebra
 using Memoize
 
 
@@ -57,37 +58,36 @@ function testPoisson()
 
     @testset "Scalar wave equation" begin
         pot = zeros(Form{4,0,false,Float64,Float64}, ldom(4))
-        abvals = approximate(waveD, ldom(4))
+        # This is weird on the boundaries and thus does not conserve
+        # energy
+        # abvals = approximate(waveD, ldom(4))
+        abvals = sample(waveD, ldom(4))
         bvals = Form(Dict(() => abvals))
         sol = solve_dAlembert_Dirichlet(pot, bvals)
 
         err = sol - bvals
         maxerr = norm(err[()], Inf)
-        @test 0.037 <= maxerr < 0.038
+        @test isapprox(maxerr, 0.02824254256516323; atol=1.0e-6)
 
         phi = sol
         dphi = deriv(phi)
-        sdphi = star(dphi)
-        act = wedge(dphi, sdphi) / 2.0
+        act = - wedge(dphi, star(dphi)) / 2.0
 
-        # Note: The action has a sign error because the metric
-        # signature is not yet handled properly
-        # et = Form(Dict(() => approximate(xt -> xt[end], dom)))
-        # nt = deriv(et)
-        # mom = phit
-        # ham = wedge(mom, star(mom)) - act
-        ham = act
-        sldom = makestaggered(ldom(4), Vec(ntuple(d -> true, 4)))
-        eham = Form(Dict((1,2,3,4) => approximate(epsD, sldom)))
+        et = Form(Dict(() => sample(xt -> xt[end], ldom(4))))
+        nt = deriv(et)
+        mom = wedge(dphi, star(nt))
+        ham = - wedge(mom, star(mom)) - act
+        sldom = makestaggered(ldom(4), trues(Vec{4,Bool}))
+        # aham = Form(Dict((1,2,3,4) => approximate(epsD, sldom)))
+        eham = Form(Dict((1,2,3,4) => sample(epsD, sldom)))
         maxerr = norm((ham - eham)[(1,2,3,4)], Inf)
-        @test isapprox(maxerr, 0.0027673958110688065; atol=1.0e-6)
+        @test isapprox(maxerr, 0.00795118587963983; atol=1.0e-6)
 
-        sdom3 = makestaggered(dom(3), Vec(ntuple(d -> true, 3)))
         etot = Array{Float64}(undef, size(ham[(1,2,3,4)].coeffs, 4))
-        dx4 = spacing(ldom(4))[4]
+        dx4 = spacing(ldom(4), 4)
         for i in 1:length(etot)
             cs = ham[(1,2,3,4)].coeffs[:,:,:,i] ./ dx4
-            ene = Form(Dict((1,2,3) => Fun{3,Float64,Float64}(sdom3, cs)))
+            ene = Form(Dict((1,2,3) => Fun{3,Float64,Float64}(sdom(3), cs)))
             etot[i] = sum(ene[(1,2,3)])
         end
         # etot = 14.804406601634037
@@ -95,7 +95,7 @@ function testPoisson()
         @test isapprox(maximum(etot), 22.494721301641462; atol=1.0e-6)
     end
 
-    @testset "Scalar wave equation with eigenmodes" begin
+    @testset "Scalar wave equation with eigenmode" begin
         lap3 = laplace(Val(0), Val(false), dom(3))
         dir3 = dirichlet(Val(0), Val(false), dom(3))
         bnd3 = boundary(Val(0), Val(false), dom(3))
@@ -131,6 +131,8 @@ function testPoisson()
             abvals.coeffs[:,:,:,i] = reshape(real.(v[:,n]), (9,9,9))
         end
         bvals = Form(Dict(() => abvals))
+        @error "this is not an eigenmode"
+
         sol = solve_dAlembert_Dirichlet(pot, bvals)
 
         err = sol - bvals
