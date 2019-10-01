@@ -49,4 +49,6 @@ plot((x,y)->pot(Vec((Double64(x),Double64(y)))), -1, 1, -1, 1)
   relations, Lie groups, etc.
 * Snorre Christiansen,
   https://www.newton.ac.uk/seminar/20191001143015301: modify
-  langangian to be invariant under group action
+  langangian to be invariant under group action. Finite elements for
+  manifolds with curvature, from first steps, different (?) from cell
+  complexes, inspired by elasticity.
