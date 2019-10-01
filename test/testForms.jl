@@ -43,11 +43,11 @@ function testForms()
 
     # Forms form a vector space
     for D in 1:4, lorentzian in [false]
-        dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
+        dom = Domain{D,Rat}(ntuple(d->d+2, D), lorentzian=lorentzian)
         for R in 0:D, Dual in false:true
-            z = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
-            as = [rand(bigrange) for i in 1:10]
-            xs = [rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
+            z = zeros(Form{D,R,Dual,Rat,Rat}, dom)
+            as = [rand(ratrange) for i in 1:10]
+            xs = [rand(ratrange, Form{D,R,Dual,Rat,Rat}, dom)
                   for i in 1:10]
             testVectorspace(z, as, xs, isequal)
         end
@@ -55,13 +55,13 @@ function testForms()
     
     # Operators form a vector space
     for D in 1:4, lorentzian in [false]
-        dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
+        dom = Domain{D,Rat}(ntuple(d->d+2, D), lorentzian=lorentzian)
         for RI in 0:D, DualI in false:true
             for RJ in 0:D, DualJ in false:true
-                z = zeros(FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat})
-                xs = FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat}[]
+                z = zeros(FOp{D,RI,DualI,RJ,DualJ,Rat,Rat})
+                xs = FOp{D,RI,DualI,RJ,DualJ,Rat,Rat}[]
                 if RI == RJ && DualI == DualJ
-                    push!(xs, one(FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat}, dom))
+                    push!(xs, one(FOp{D,RI,DualI,RJ,DualJ,Rat,Rat}, dom))
                 end
                 if RI == D - RJ && DualI == !DualJ
                     push!(xs, star(Val(RJ), Val(DualJ), dom))
@@ -93,7 +93,7 @@ function testForms()
                     push!(xs, c * s)
                 end
                 if !isempty(xs)
-                    as = [rand(bigrange) for i in 1:10]
+                    as = [rand(ratrange) for i in 1:10]
                     testVectorspace(z, as, xs, isequal)
                 end
             end
@@ -101,10 +101,10 @@ function testForms()
     end
     
     @testset "Forms.Wedge D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in [false]
-        dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
+        dom = Domain{D,Rat}(ntuple(d->d+2, D), lorentzian=lorentzian)
         for RI in 0:D, RJ in 0:D - RI, DualI in false:true, DualJ in false:true
-            f0 = zeros(Form{D,RI,DualI,BigRat,BigRat}, dom)
-            g0 = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
+            f0 = zeros(Form{D,RI,DualI,Rat,Rat}, dom)
+            g0 = zeros(Form{D,RJ,DualJ,Rat,Rat}, dom)
     
             # we test all primal-primal as well as certain primal-dual
             # operations
@@ -128,24 +128,24 @@ function testForms()
                     end
                 end
                 k = Vec{RI+RJ,Int}(Tuple(sort(Int[i..., j...])))
-                f = zeros(Form{D,RI,DualI,BigRat,BigRat}, dom)
-                g = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
-                h = zeros(Form{D,RI+RJ,false,BigRat,BigRat}, dom)
-                f.comps[i] = fconst(f.comps[i].dom, BigRat(1))
-                g.comps[j] = fconst(g.comps[j].dom, BigRat(1))
+                f = zeros(Form{D,RI,DualI,Rat,Rat}, dom)
+                g = zeros(Form{D,RJ,DualJ,Rat,Rat}, dom)
+                h = zeros(Form{D,RI+RJ,false,Rat,Rat}, dom)
+                f.comps[i] = fconst(f.comps[i].dom, Rat(1))
+                g.comps[j] = fconst(g.comps[j].dom, Rat(1))
                 if s != 0
-                    h.comps[k] = fconst(h.comps[k].dom, BigRat(s))
+                    h.comps[k] = fconst(h.comps[k].dom, Rat(s))
                 end
                 r = wedge(f, g)
                 @test r == h
             end
     
             for n in 1:10
-                a = rand(bigrange)
-                f = rand(bigrange, Form{D,RI,DualI,BigRat,BigRat}, dom)
-                f2 = rand(bigrange, Form{D,RI,DualI,BigRat,BigRat}, dom)
-                g = rand(bigrange, Form{D,RJ,DualJ,BigRat,BigRat}, dom)
-                g2 = rand(bigrange, Form{D,RJ,DualJ,BigRat,BigRat}, dom)
+                a = rand(ratrange)
+                f = rand(ratrange, Form{D,RI,DualI,Rat,Rat}, dom)
+                f2 = rand(ratrange, Form{D,RI,DualI,Rat,Rat}, dom)
+                g = rand(ratrange, Form{D,RJ,DualJ,Rat,Rat}, dom)
+                g2 = rand(ratrange, Form{D,RJ,DualJ,Rat,Rat}, dom)
     
                 # Linearity
                 @test isequal(wedge(a * f, g), a * wedge(f, g))
@@ -163,13 +163,13 @@ function testForms()
                     if RJ == RI && isodd(RI)
                         @test iszero(wedge(f, f))
                     end
-                    s = BigRat(bitsign(RI * RJ))
+                    s = Rat(bitsign(RI * RJ))
                     @test isequal(wedge(g, f), s * wedge(f, g))
                 end
             end
         end
     end
-    
+        
     @testset "Forms.Star D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in false:true
         dom = Domain{D,Rat}(ntuple(d->d+2, D), lorentzian=lorentzian)
     
@@ -182,17 +182,17 @@ function testForms()
         end
     
         if !lorentzian
-        for R in 0:D, Dual in [false]
+            for R in 0:D, Dual in [false]
                 f = rand(ratrange, Form{D,R,Dual,Rat,Rat}, dom)
-            sf = star(f)
-            fsf = wedge(f, sf)
-            for (i,fsfi) in fsf.comps
-                @test all(fsfi.coeffs .>= 0)
-            end
+                sf = star(f)
+                fsf = wedge(f, sf)
+                for (i,fsfi) in fsf.comps
+                    @test all(fsfi.coeffs .>= 0)
+                end
                 if iszero(f)
                     @test integral(fsf) == 0
                 else
-                @test integral(fsf) > 0
+                    @test integral(fsf) > 0
                 end
                 z = zeros(Form{D,R,Dual,Rat,Rat}, dom)
                 @test integral(wedge(z, star(z))) == 0
