@@ -44,156 +44,156 @@ function testForms()
     BigRat = Rational{BigInt}
     bigrange = -10 : big(1//10) : 10
 
-    #TODO # Forms form a vector space
-    #TODO for D in 1:4, lorentzian in [false]
-    #TODO     dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
-    #TODO     for R in 0:D, Dual in false:true
-    #TODO         z = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
-    #TODO         as = [rand(bigrange) for i in 1:10]
-    #TODO         xs = [rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
-    #TODO               for i in 1:10]
-    #TODO         testVectorspace(z, as, xs, isequal)
-    #TODO     end
-    #TODO end
-    #TODO 
-    #TODO # Operators form a vector space
-    #TODO for D in 1:4, lorentzian in [false]
-    #TODO     dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
-    #TODO     for RI in 0:D, DualI in false:true
-    #TODO         for RJ in 0:D, DualJ in false:true
-    #TODO             z = zeros(FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat})
-    #TODO             xs = FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat}[]
-    #TODO             if RI == RJ && DualI == DualJ
-    #TODO                 push!(xs, one(FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat}, dom))
-    #TODO             end
-    #TODO             if RI == D - RJ && DualI == !DualJ
-    #TODO                 push!(xs, star(Val(RJ), Val(DualJ), dom))
-    #TODO             end
-    #TODO             if RI == RJ + 1 && DualI == DualJ
-    #TODO                 push!(xs, deriv(Val(RJ), Val(DualJ), dom))
-    #TODO             end
-    #TODO             if RI == D - (RJ + 1) && DualI == !DualJ
-    #TODO                 d = deriv(Val(RJ), Val(DualJ), dom)
-    #TODO                 s = star(Val(RJ + 1), Val(DualJ), dom)
-    #TODO                 push!(xs, s * d)
-    #TODO             end
-    #TODO             if RI == (D - RJ) + 1 && DualI == !DualJ
-    #TODO                 s = star(Val(RJ), Val(DualJ), dom)
-    #TODO                 d = deriv(Val(D - RJ), Val(!DualJ), dom)
-    #TODO                 push!(xs, d * s)
-    #TODO             end
-    #TODO             if RI == RJ - 1 && DualI == DualJ
-    #TODO                 push!(xs, coderiv(Val(RJ), Val(DualJ), dom))
-    #TODO             end
-    #TODO             if RI == D - (RJ - 1) && DualI == !DualJ
-    #TODO                 c = coderiv(Val(RJ), Val(DualJ), dom)
-    #TODO                 s = star(Val(RJ - 1), Val(DualJ), dom)
-    #TODO                 push!(xs, s * c)
-    #TODO             end
-    #TODO             if RI == (D - RJ) - 1 && DualI == !DualJ
-    #TODO                 s = star(Val(RJ), Val(DualJ), dom)
-    #TODO                 c = coderiv(Val(D - RJ), Val(!DualJ), dom)
-    #TODO                 push!(xs, c * s)
-    #TODO             end
-    #TODO             if !isempty(xs)
-    #TODO                 as = [rand(bigrange) for i in 1:10]
-    #TODO                 testVectorspace(z, as, xs, isequal)
-    #TODO             end
-    #TODO         end
-    #TODO     end
-    #TODO end
-    #TODO 
-    #TODO @testset "Forms.Wedge D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in [false]
-    #TODO     dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
-    #TODO     for RI in 0:D, RJ in 0:D - RI, DualI in false:true, DualJ in false:true
-    #TODO         f0 = zeros(Form{D,RI,DualI,BigRat,BigRat}, dom)
-    #TODO         g0 = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
-    #TODO 
-    #TODO         # we test all primal-primal as well as certain primal-dual
-    #TODO         # operations
-    #TODO         (!DualI && !DualJ) || (!DualI && DualJ && RI + RJ == D) || continue
-    #TODO 
-    #TODO         # Unit vectors
-    #TODO         for (i,fi) in f0.comps, (j,gj) in g0.comps
-    #TODO             istag = idx2staggered(Val(D), i)
-    #TODO             jstag = idx2staggered(Val(D), j)
-    #TODO             if any(istag & jstag)
-    #TODO                 s = 0
-    #TODO             else
-    #TODO                 ij = Int[i..., j...]
-    #TODO                 s = 1
-    #TODO                 while !isempty(ij)
-    #TODO                     y,x = findmin(ij)
-    #TODO                     if iseven(x)
-    #TODO                         s = -s
-    #TODO                     end
-    #TODO                     deleteat!(ij, x)
-    #TODO                 end
-    #TODO             end
-    #TODO             k = Vec{RI+RJ,Int}(Tuple(sort(Int[i..., j...])))
-    #TODO             f = zeros(Form{D,RI,DualI,BigRat,BigRat}, dom)
-    #TODO             g = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
-    #TODO             h = zeros(Form{D,RI+RJ,false,BigRat,BigRat}, dom)
-    #TODO             f.comps[i] = fconst(f.comps[i].dom, BigRat(1))
-    #TODO             g.comps[j] = fconst(g.comps[j].dom, BigRat(1))
-    #TODO             if s != 0
-    #TODO                 h.comps[k] = fconst(h.comps[k].dom, BigRat(s))
-    #TODO             end
-    #TODO             r = wedge(f, g)
-    #TODO             @test r == h
-    #TODO         end
-    #TODO 
-    #TODO         for n in 1:10
-    #TODO             a = rand(bigrange)
-    #TODO             f = rand(bigrange, Form{D,RI,DualI,BigRat,BigRat}, dom)
-    #TODO             f2 = rand(bigrange, Form{D,RI,DualI,BigRat,BigRat}, dom)
-    #TODO             g = rand(bigrange, Form{D,RJ,DualJ,BigRat,BigRat}, dom)
-    #TODO             g2 = rand(bigrange, Form{D,RJ,DualJ,BigRat,BigRat}, dom)
-    #TODO 
-    #TODO             # Linearity
-    #TODO             @test isequal(wedge(a * f, g), a * wedge(f, g))
-    #TODO             @test isequal(wedge(f, a * g), a * wedge(f, g))
-    #TODO             @test isequal(wedge(f + f2, g), wedge(f, g) + wedge(f2, g))
-    #TODO             @test isequal(wedge(f, g + g2), wedge(f, g) + wedge(f, g2))
-    #TODO 
-    #TODO             # Note: the discrete primal-primal wedge is not associative
-    #TODO 
-    #TODO             # TODO: associative for closed forms
-    #TODO             # TODO: natural under pullbacks
-    #TODO 
-    #TODO             # Antisymmetry
-    #TODO             if DualI == DualJ
-    #TODO                 if RJ == RI && isodd(RI)
-    #TODO                     @test iszero(wedge(f, f))
-    #TODO                 end
-    #TODO                 s = BigRat(bitsign(RI * RJ))
-    #TODO                 @test isequal(wedge(g, f), s * wedge(f, g))
-    #TODO             end
-    #TODO         end
-    #TODO     end
-    #TODO end
-    #TODO 
-    #TODO @testset "Forms.Star D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in false:true
-    #TODO     dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
-    #TODO 
-    #TODO     for R in 0:D, Dual in false:true
-    #TODO         f = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
-    #TODO         sf = star(f)
-    #TODO         ssf = star(sf)
-    #TODO         s = bitsign(R * (D - R)) * bitsign(lorentzian)
-    #TODO         @test f == BigRat(s) * ssf
-    #TODO     end
-    #TODO 
-    #TODO     for R in 0:D, Dual in [false]
-    #TODO         f = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
-    #TODO         sf = star(f)
-    #TODO         fsf = wedge(f, sf)
-    #TODO         for (i,fsfi) in fsf.comps
-    #TODO             @test all(fsfi.coeffs .>= 0)
-    #TODO         end
-    #TODO     end
-    #TODO 
-    #TODO end
+    # Forms form a vector space
+    for D in 1:4, lorentzian in [false]
+        dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
+        for R in 0:D, Dual in false:true
+            z = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
+            as = [rand(bigrange) for i in 1:10]
+            xs = [rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
+                  for i in 1:10]
+            testVectorspace(z, as, xs, isequal)
+        end
+    end
+    
+    # Operators form a vector space
+    for D in 1:4, lorentzian in [false]
+        dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
+        for RI in 0:D, DualI in false:true
+            for RJ in 0:D, DualJ in false:true
+                z = zeros(FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat})
+                xs = FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat}[]
+                if RI == RJ && DualI == DualJ
+                    push!(xs, one(FOp{D,RI,DualI,RJ,DualJ,BigRat,BigRat}, dom))
+                end
+                if RI == D - RJ && DualI == !DualJ
+                    push!(xs, star(Val(RJ), Val(DualJ), dom))
+                end
+                if RI == RJ + 1 && DualI == DualJ
+                    push!(xs, deriv(Val(RJ), Val(DualJ), dom))
+                end
+                if RI == D - (RJ + 1) && DualI == !DualJ
+                    d = deriv(Val(RJ), Val(DualJ), dom)
+                    s = star(Val(RJ + 1), Val(DualJ), dom)
+                    push!(xs, s * d)
+                end
+                if RI == (D - RJ) + 1 && DualI == !DualJ
+                    s = star(Val(RJ), Val(DualJ), dom)
+                    d = deriv(Val(D - RJ), Val(!DualJ), dom)
+                    push!(xs, d * s)
+                end
+                if RI == RJ - 1 && DualI == DualJ
+                    push!(xs, coderiv(Val(RJ), Val(DualJ), dom))
+                end
+                if RI == D - (RJ - 1) && DualI == !DualJ
+                    c = coderiv(Val(RJ), Val(DualJ), dom)
+                    s = star(Val(RJ - 1), Val(DualJ), dom)
+                    push!(xs, s * c)
+                end
+                if RI == (D - RJ) - 1 && DualI == !DualJ
+                    s = star(Val(RJ), Val(DualJ), dom)
+                    c = coderiv(Val(D - RJ), Val(!DualJ), dom)
+                    push!(xs, c * s)
+                end
+                if !isempty(xs)
+                    as = [rand(bigrange) for i in 1:10]
+                    testVectorspace(z, as, xs, isequal)
+                end
+            end
+        end
+    end
+    
+    @testset "Forms.Wedge D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in [false]
+        dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
+        for RI in 0:D, RJ in 0:D - RI, DualI in false:true, DualJ in false:true
+            f0 = zeros(Form{D,RI,DualI,BigRat,BigRat}, dom)
+            g0 = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
+    
+            # we test all primal-primal as well as certain primal-dual
+            # operations
+            (!DualI && !DualJ) || (!DualI && DualJ && RI + RJ == D) || continue
+    
+            # Unit vectors
+            for (i,fi) in f0.comps, (j,gj) in g0.comps
+                istag = idx2staggered(Val(D), i)
+                jstag = idx2staggered(Val(D), j)
+                if any(istag & jstag)
+                    s = 0
+                else
+                    ij = Int[i..., j...]
+                    s = 1
+                    while !isempty(ij)
+                        y,x = findmin(ij)
+                        if iseven(x)
+                            s = -s
+                        end
+                        deleteat!(ij, x)
+                    end
+                end
+                k = Vec{RI+RJ,Int}(Tuple(sort(Int[i..., j...])))
+                f = zeros(Form{D,RI,DualI,BigRat,BigRat}, dom)
+                g = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
+                h = zeros(Form{D,RI+RJ,false,BigRat,BigRat}, dom)
+                f.comps[i] = fconst(f.comps[i].dom, BigRat(1))
+                g.comps[j] = fconst(g.comps[j].dom, BigRat(1))
+                if s != 0
+                    h.comps[k] = fconst(h.comps[k].dom, BigRat(s))
+                end
+                r = wedge(f, g)
+                @test r == h
+            end
+    
+            for n in 1:10
+                a = rand(bigrange)
+                f = rand(bigrange, Form{D,RI,DualI,BigRat,BigRat}, dom)
+                f2 = rand(bigrange, Form{D,RI,DualI,BigRat,BigRat}, dom)
+                g = rand(bigrange, Form{D,RJ,DualJ,BigRat,BigRat}, dom)
+                g2 = rand(bigrange, Form{D,RJ,DualJ,BigRat,BigRat}, dom)
+    
+                # Linearity
+                @test isequal(wedge(a * f, g), a * wedge(f, g))
+                @test isequal(wedge(f, a * g), a * wedge(f, g))
+                @test isequal(wedge(f + f2, g), wedge(f, g) + wedge(f2, g))
+                @test isequal(wedge(f, g + g2), wedge(f, g) + wedge(f, g2))
+    
+                # Note: the discrete primal-primal wedge is not associative
+    
+                # TODO: associative for closed forms
+                # TODO: natural under pullbacks
+    
+                # Antisymmetry
+                if DualI == DualJ
+                    if RJ == RI && isodd(RI)
+                        @test iszero(wedge(f, f))
+                    end
+                    s = BigRat(bitsign(RI * RJ))
+                    @test isequal(wedge(g, f), s * wedge(f, g))
+                end
+            end
+        end
+    end
+    
+    @testset "Forms.Star D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in false:true
+        dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
+    
+        for R in 0:D, Dual in false:true
+            f = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
+            sf = star(f)
+            ssf = star(sf)
+            s = bitsign(R * (D - R)) * bitsign(lorentzian)
+            @test f == BigRat(s) * ssf
+        end
+    
+        for R in 0:D, Dual in [false]
+            f = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
+            sf = star(f)
+            fsf = wedge(f, sf)
+            for (i,fsfi) in fsf.comps
+                @test all(fsfi.coeffs .>= 0)
+            end
+        end
+    
+    end
 
     @testset "Forms.Derivatives D=$D" for D in 1:4, lorentzian in [false]
         dom = Domain{D,BigRat}(ntuple(d->d+3, D), lorentzian=lorentzian)
@@ -248,7 +248,6 @@ function testForms()
                 for (j,gj) in g0.comps, jdir in 1:D
                     g = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
                     g.comps[j] = sample(x->x[jdir], g.comps[j].dom)
-                    @show (D, lorentzian) (R, Dual, idir) (RJ, DualJ, jdir)
                     s = 1
                     @test (integral(wedge(deriv(f), g)) ==
                            s * integral(wedge(f, deriv(g))) +
