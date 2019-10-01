@@ -116,13 +116,13 @@ function Base.:(==)(f::Fun{D,T,U}, g::Fun{D,T,U})::Bool where {D,T <: Number,U}
     iszero(f - g)
 end
 
-function Base.max(f::Fun{D,T,U})::T where {D,T <: Number,U}
+function Base.max(f::Fun{D,T,U})::U where {D,T <: Number,U}
     maximum(f.coeffs)
 end
-function Base.min(f::Fun{D,T,U})::T where {D,T <: Number,U}
+function Base.min(f::Fun{D,T,U})::U where {D,T <: Number,U}
     minimum(f.coeffs)
 end
-function Base.sum(f::Fun{D,T,U})::T where {D,T <: Number,U}
+function Base.sum(f::Fun{D,T,U})::U where {D,T <: Number,U}
     dom = f.dom
     Ws = weights(dom)
 

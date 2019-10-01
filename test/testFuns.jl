@@ -68,7 +68,7 @@ function testFuns()
     BigRat = Rational{BigInt}
     bigrange = -10 : big(1//10) : 10
     for D in 1:2
-        dom = Domain{D,BigRat}(5)
+        dom = Domain{D,BigRat}(ntuple(d->d+2, D))
         z = zeros(Fun{D,BigRat,BigRat}, dom)
         as = [rand(bigrange) for i in 1:100]
         xs = [Fun{D,BigRat,BigRat}(dom, rand(bigrange, dom.n.elts))

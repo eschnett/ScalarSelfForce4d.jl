@@ -59,7 +59,7 @@ function dot_basis(dom::Domain{D,T}, d::Int, i::Int, j::Int)::T where
     @assert !dom.staggered[d]
     @assert i >= 0 && i < dom.n[d]
     @assert j >= 0 && j < dom.n[d]
-    dx = spacing(dom)[d]
+    dx = spacing(dom, d)
     if j == i - 1
         return dx / 6
     elseif j == i
@@ -83,7 +83,7 @@ function dot_sbasis(dom::Domain{D,T}, d::Int, i::Int, j::Int)::T where
     @assert dom.staggered[d]
     @assert i >= 0 && i < dom.n[d]
     @assert j >= 0 && j < dom.n[d]
-    dx = spacing(dom)[d]
+    dx = spacing(dom, d)
     if j == i
         return 1 / dx
     else
@@ -142,7 +142,7 @@ function weight(dom::Domain{D,T}, d::Int, i::Int)::T where {D,T <: Number}
 
     n = dom.n[d]
     @assert i >= 0 && i < n
-    dx = spacing(dom)[d]
+    dx = spacing(dom, d)
 
     if !dom.staggered[d]
         if i == 0
@@ -154,6 +154,12 @@ function weight(dom::Domain{D,T}, d::Int, i::Int)::T where {D,T <: Number}
         end
     else
         return T(1)
+    end
+end
+@generated function weight(dom::Domain{D,T}, i::Vec{D,Int})::T where
+        {D,T <: Number}
+    quote
+        *($([:(weight(dom, $d, i[$d])) for d in 1:D]...))
     end
 end
 

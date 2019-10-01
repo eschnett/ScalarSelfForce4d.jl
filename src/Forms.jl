@@ -5,8 +5,10 @@ module Forms
 
 using Random
 using Combinatorics
+using LinearAlgebra
 using SparseArrays
 
+using ..Bases
 using ..Defs
 using ..Domains
 using ..Funs
@@ -451,6 +453,212 @@ function diff(dom::Domain{D,T}, dir::Int)::Op{D,T,T} where {D,T <: Number}
     mat = sparse(I, J, V, prod(ni), prod(nj))
 
     Op{D,T,T}(rdom, dom, mat)
+end
+
+
+
+# # We assume f is a form (cochain), g is a tensor (chain)
+# function LinearAlgebra.dot(f::Form{D,R,false,T,U},
+#                            g::Form{D,R,false,T,U})::U where {D, R, T, U}
+#     dom = f.dom
+#     @assert g.dom == dom
+# 
+#     s = U(0)
+#     for (c,fc) = f.comps
+#         gc = g[c]
+#         sp = prod(fc.dom.staggered[d] ? 1 / spacing(fc.dom, d) : T(1)
+#                   for d in 1:D)
+#         for i in CartesianIndices(size(fc.coeffs))
+#             w = weight(fc.dom, Vec{D,Int}(i.I) .- 1) * sp
+#             s += w * fc[i] * gc[i]
+#         end
+#     end
+#     s
+# end
+
+
+
+export integral
+function integral(f::Form{D,R,false,T,U})::U where {D, R, T, U}
+    sum(sum(fi.coeffs) for (i,fi) in f.comps)
+end
+
+
+
+export boundary
+
+@generated function boundary(f::Form{D,R,false,T,U})::Form{D,R,false,T,U} where
+        {D, R, T, U}
+    @assert 0 <= R < D
+    quote
+        dom = f.dom
+        rd = Dict{Vec{R,Int}, Fun{D,T,U}}()
+        $([begin
+            staggered = Vec{D,Bool}(staggeredc.I)
+            if count(staggered) == R
+                idx = Vec{R,Int}(Tuple(staggered2idx(staggered)))
+                quote
+                    fi = f[$idx]
+                    ridom = fi.dom
+                    rc = Array{U}(undef, ridom.n.elts)
+                    for i in CartesianIndices(size(rc))
+                        rci = U(0)
+                        $([begin
+                            if !staggered[d]
+                                s = bitsign(count(d .> idx))
+                                quote
+                                    if i[$d] == 1
+                                        rci -= $s * fi[i]
+                                    elseif i[$d] == ridom.n[$d]
+                                        rci += $s * fi[i]
+                                    end
+                                end
+                            end
+                        end for d in 1:D]...)
+                        rc[i] = rci
+                    end
+                    rd[$idx] = Fun(ridom, rc)
+                end
+            end
+        end for staggeredc in CartesianIndices(ntuple(d -> 0:1, D))]...)
+        Form(rd)
+    end
+end
+
+function boundary2(f::Form{D,R,false,T,U})::Form{D,R,false,T,U} where
+        {D, R, T, U}
+    @assert 0 <= R < D
+    dom = f.dom
+
+    rd = Dict{Vec{R,Int}, Fun{D,T,U}}()
+    for staggeredc in CartesianIndices(ntuple(d -> 0:1, D))
+        staggered = Vec{D,Bool}(staggeredc.I)
+        if count(staggered) == R
+            idx = Vec{R,Int}(Tuple(staggered2idx(staggered)))
+            fi = f[idx]
+            ridom = fi.dom
+            rc = Array{U}(undef, ridom.n.elts)
+            for i in CartesianIndices(size(rc))
+                rci = U(0)
+                for d in 1:D
+                    if !staggered[d]
+                        s = bitsign(count(d .> idx))
+                        if i[d] == 1
+                            rci -= s * fi[i]
+                        elseif i[d] == size(rc, d)
+                            rci += s * fi[i]
+                        end
+                    end
+                end
+                rc[i] = rci
+            end
+            rd[idx] = Fun(ridom, rc)
+        end
+    end
+    Form(rd)
+end
+
+function boundary1(f::Form{D,R,false,T,U})::Form{D,R-1,false,T,U} where
+        {D, R, T, U}
+    @assert R > 0
+    dom = f.dom
+    di = ntuple(dir -> CartesianIndex(ntuple(d->d == dir, D)), D)
+
+    if D == 1 && R == 1
+        f1x = f[(1,)]
+        rdom0 = makestaggered(dom, Vec((false,)))
+        rc0 = Array{U}(undef, rdom0.n.elts)
+        for i in CartesianIndices(size(rc0))
+            rci = U(0)
+            if i[1] == 1
+                rci -= f1x[i]
+            elseif i[1] == rdom0.n[1]
+                rci += f1x[i - di[1]]
+            end
+            rc0[i] = rci
+        end
+        Form(Dict(() => Fun(rdom0, rc0)))
+    elseif D == 2 && R == 1
+        f1x = f[(1,)]
+        f1y = f[(2,)]
+        rdom0 = makestaggered(dom, Vec((false, false)))
+        rc0 = Array{U}(undef, rdom0.n.elts)
+        for i in CartesianIndices(size(rc0))
+            rci = U(0)
+            if i[1] == 1
+                rci -= f1x[i]
+            elseif i[1] == rdom0.n[1]
+                rci += f1x[i - di[1]]
+            end
+            if i[2] == 1
+                rci += f1y[i]
+            elseif i[2] == rdom0.n[2]
+                rci -= f1y[i - di[2]]
+            end
+            rc0[i] = rci
+        end
+        Form(Dict(() => Fun(rdom0, rc0)))
+    elseif D == 2 && R == 2
+        f2xy = f[(1,2)]
+        rdom1x = makestaggered(dom, Vec((true, false)))
+        rdom1y = makestaggered(dom, Vec((false, true)))
+        rc1x = Array{U}(undef, rdom1x.n.elts)
+        rc1y = Array{U}(undef, rdom1y.n.elts)
+        for i in CartesianIndices(size(rc1x))
+            rci = U(0)
+            if i[2] == 1
+                rci -= f2xy[i]
+            elseif i[2] == rdom1x.n[2]
+                rci += f2xy[i - di[2]]
+            end
+            rc1x[i] = rci
+        end
+        for i in CartesianIndices(size(rc1y))
+            rci = U(0)
+            if i[1] == 1
+                rci -= f2xy[i]
+            elseif i[1] == rdom1y.n[1]
+                rci += f2xy[i - di[1]]
+            end
+            rc1y[i] = rci
+        end
+        Form(Dict((1,) => Fun(rdom1x, rc1x), (2,) => Fun(rdom1y, rc1y)))
+    else
+        @assert false
+    end
+end
+
+function boundary(::Val{0}, ::Val{false},
+                  dom::Domain{D,T})::FOp{D,0,false,0,false,T,T} where
+        {D,T <: Number}
+    n = dom.n
+
+    str = strides(n)
+    len = prod(n)
+    idx(i::CartesianIndex{D}) = 1 + sum((i[d] - 1) * str[d] for d in 1:D)
+
+    I = Int[]
+    J = Int[]
+    V = T[]
+    maxsize = 2 * sum(len ÷ dom.n[d] for d in 1:D)
+    sizehint!(I, maxsize)
+    sizehint!(J, maxsize)
+    sizehint!(V, maxsize)
+    function ins!(i, j, v)
+        push!(I, idx(i))
+        push!(J, idx(j))
+        push!(V, v)
+    end
+    for i in CartesianIndices(dom.n.elts)
+        if any(i.I .== 1) || any(i.I .== n.elts)
+            ins!(i, i, T(1))
+        end
+    end
+    mat = sparse(I, J, V, len, len)
+    comp00 = Op{D,T,T}(dom, dom, mat)
+
+    comps = Dict(Vec{0,Int}(()) => Dict(Vec{0,Int}(()) => comp00))
+    FOp{D,0,false,0,false,T,T}(comps)
 end
 
 
@@ -929,40 +1137,6 @@ function laplace(::Val{R}, ::Val{Dual},
 end
 
 
-
-export boundary
-function boundary(::Val{0}, ::Val{false},
-                  dom::Domain{D,T})::FOp{D,0,false,0,false,T,T} where
-        {D,T <: Number}
-    n = dom.n
-
-    str = strides(n)
-    len = prod(n)
-    idx(i::CartesianIndex{D}) = 1 + sum((i[d] - 1) * str[d] for d in 1:D)
-
-    I = Int[]
-    J = Int[]
-    V = T[]
-    maxsize = 2 * sum(len ÷ dom.n[d] for d in 1:D)
-    sizehint!(I, maxsize)
-    sizehint!(J, maxsize)
-    sizehint!(V, maxsize)
-    function ins!(i, j, v)
-        push!(I, idx(i))
-        push!(J, idx(j))
-        push!(V, v)
-    end
-    for i in CartesianIndices(dom.n.elts)
-        if any(i.I .== 1) || any(i.I .== n.elts)
-            ins!(i, i, T(1))
-        end
-    end
-    mat = sparse(I, J, V, len, len)
-    comp00 = Op{D,T,T}(dom, dom, mat)
-
-    comps = Dict(Vec{0,Int}(()) => Dict(Vec{0,Int}(()) => comp00))
-    FOp{D,0,false,0,false,T,T}(comps)
-end
 
 export dirichlet
 const dirichlet = boundary

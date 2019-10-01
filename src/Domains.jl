@@ -28,9 +28,10 @@ struct Domain{D,T}
     xmax::Vec{D,T}
 end
 
-function (::Type{Domain{D,T}})(np::Int; lorentzian = false) where {D,T}
+function (::Type{Domain{D,T}})(np::NTuple{D,Int};
+                               lorentzian::Bool = false) where {D,T}
     staggered = falses(Vec{D,Bool})
-    n = Vec{D,Int}(ntuple(d->np, D))
+    n = Vec{D,Int}(np)
     if lorentzian
         metric = Vec{D,Int}(ntuple(d->d == D ? -1 : 1, D))
     else
@@ -39,6 +40,10 @@ function (::Type{Domain{D,T}})(np::Int; lorentzian = false) where {D,T}
     xmin = Vec{D,T}(ntuple(d->metric[d] < 0 ? 0 : -1, D))
     xmax = Vec{D,T}(ntuple(d->1, D))
     Domain{D,T}(false, staggered, n, metric, xmin, xmax)
+end
+
+function (::Type{Domain{D,T}})(np::Int; lorentzian::Bool = false) where {D,T}
+    Domain{D,T}(ntuple(d->np, D), lorentzian=lorentzian)
 end
 
 export makeprimal
