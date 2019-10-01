@@ -184,6 +184,7 @@ function testForms()
             @test f == BigRat(s) * ssf
         end
     
+        if !lorentzian
         for R in 0:D, Dual in [false]
             f = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
             sf = star(f)
@@ -191,8 +192,11 @@ function testForms()
             for (i,fsfi) in fsf.comps
                 @test all(fsfi.coeffs .>= 0)
             end
+                @test integral(fsf) > 0
+                z = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
+                @test integral(wedge(z, star(z))) == 0
+            end
         end
-    
     end
 
     @testset "Forms.Derivatives D=$D" for D in 1:4, lorentzian in [false]
@@ -248,6 +252,8 @@ function testForms()
                 for (j,gj) in g0.comps, jdir in 1:D
                     g = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
                     g.comps[j] = sample(x->x[jdir], g.comps[j].dom)
+                    # Why does s=1 always work? Is the result always
+                    # zero?
                     s = 1
                     @test (integral(wedge(deriv(f), g)) ==
                            s * integral(wedge(f, deriv(g))) +
@@ -255,7 +261,8 @@ function testForms()
                 end
             end
 
-            for n in 1:10
+            @warn "1:10"
+            for n in 1:1
                 a = rand(bigrange)
                 f = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
                 f2 = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
@@ -275,10 +282,21 @@ function testForms()
                 RJ = D - R - 1
                 DualJ = false # false:true
                 g = rand(bigrange, Form{D,RJ,DualJ,BigRat,BigRat}, dom)
-                s = 1
+                s = iseven(R) ? -1 : 1
+                # if (D,R) == (2,1) || (D,R) == (3,1)
+                #     s = 1
+                # elseif (D,R) == (1,0) || (D,R) == (2,0) || (D,R) == (3,0) || (D,R) == (3,2) || (D,R) == (4,0)
+                #     s = -1
+                # else
+                #     @assert false
+                # end
+                @show (D, lorentzian) (R, Dual) (RJ, DualJ) s
                 @test (integral(wedge(deriv(f), g)) ==
                        s * integral(wedge(f, deriv(g))) +
                        integral(boundary(wedge(f, g))))
+                @assert (integral(wedge(deriv(f), g)) ==
+                         s * integral(wedge(f, deriv(g))) +
+                         integral(boundary(wedge(f, g))))
             end
 
         end

@@ -39,7 +39,10 @@ plot((x,y)->pot(Vec((Double64(x),Double64(y)))), -1, 1, -1, 1)
   http://brickisland.net/DDGFall2017/wp-content/uploads/2017/09/CMU_DDG_Fall2017_06_DiscreteExteriorCalculus.pdf
 * Lecture 2: The simplicial complex. http://brickisland.net/DDGFall2017/wp-content/uploads/2017/09/CMU_DDG_Fall2017_02_SimpicialComplex-1.pdf
 
-* Ari Stern, https://www.newton.ac.uk/seminar/20190930143015301,
-  minute 20: hamiltonian, conserved symplected 2-form
 * Douglas N. Arnold: Finite element exterior calculus.
   http://www-users.math.umn.edu/~arnold/feec-cbms/index.html
+
+* Ari Stern, https://www.newton.ac.uk/seminar/20190930143015301,
+  minute 20: hamiltonian, conserved symplected 2-form
+* Melvin Leok, https://www.newton.ac.uk/seminar/20191001110012001:
+  variational integrators, spacetime discretizations, Lie groups, etc.
