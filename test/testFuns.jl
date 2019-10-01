@@ -65,13 +65,11 @@ end
 
 function testFuns()
 
-    BigRat = Rational{BigInt}
-    bigrange = -10 : big(1//10) : 10
     for D in 1:2
-        dom = Domain{D,BigRat}(ntuple(d->d+2, D))
-        z = zeros(Fun{D,BigRat,BigRat}, dom)
-        as = [rand(bigrange) for i in 1:100]
-        xs = [Fun{D,BigRat,BigRat}(dom, rand(bigrange, dom.n.elts))
+        dom = Domain{D,Rat}(ntuple(d->d+2, D))
+        z = zeros(Fun{D,Rat,Rat}, dom)
+        as = [rand(ratrange) for i in 1:100]
+        xs = [Fun{D,Rat,Rat}(dom, rand(ratrange, dom.n.elts))
               for i in 1:100]
         testVectorspace(z, as, xs, isequal)
     end

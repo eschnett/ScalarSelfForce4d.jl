@@ -1,5 +1,10 @@
 using Test
 
+
+const Rat = Rational{Int64}
+# const Rat = Rational{BigInt}
+const ratrange = -10 : Rat(1//10) : 10
+
 # Helpers
 include("testVectorspace.jl")
 

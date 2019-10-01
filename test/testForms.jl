@@ -41,9 +41,6 @@ end
 
 function testForms()
 
-    BigRat = Rational{BigInt}
-    bigrange = -10 : big(1//10) : 10
-
     # Forms form a vector space
     for D in 1:4, lorentzian in [false]
         dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
@@ -174,52 +171,56 @@ function testForms()
     end
     
     @testset "Forms.Star D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in false:true
-        dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian=lorentzian)
+        dom = Domain{D,Rat}(ntuple(d->d+2, D), lorentzian=lorentzian)
     
         for R in 0:D, Dual in false:true
-            f = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
+            f = rand(ratrange, Form{D,R,Dual,Rat,Rat}, dom)
             sf = star(f)
             ssf = star(sf)
             s = bitsign(R * (D - R)) * bitsign(lorentzian)
-            @test f == BigRat(s) * ssf
+            @test f == Rat(s) * ssf
         end
     
         if !lorentzian
         for R in 0:D, Dual in [false]
-            f = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
+                f = rand(ratrange, Form{D,R,Dual,Rat,Rat}, dom)
             sf = star(f)
             fsf = wedge(f, sf)
             for (i,fsfi) in fsf.comps
                 @test all(fsfi.coeffs .>= 0)
             end
+                if iszero(f)
+                    @test integral(fsf) == 0
+                else
                 @test integral(fsf) > 0
-                z = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
+                end
+                z = zeros(Form{D,R,Dual,Rat,Rat}, dom)
                 @test integral(wedge(z, star(z))) == 0
             end
         end
     end
 
     @testset "Forms.Derivatives D=$D" for D in 1:4, lorentzian in [false]
-        dom = Domain{D,BigRat}(ntuple(d->d+3, D), lorentzian=lorentzian)
+        dom = Domain{D,Rat}(ntuple(d->d+3, D), lorentzian=lorentzian)
         for R in 0:D-1, Dual in [false] # false:true
 
             # Zero
-            z = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
+            z = zeros(Form{D,R,Dual,Rat,Rat}, dom)
             dz = deriv(z)
             @test iszero(dz)
 
             # Constant
-            c = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
+            c = zeros(Form{D,R,Dual,Rat,Rat}, dom)
             for (i,ci) in c.comps
-                c.comps[i] = fconst(c.comps[i].dom, BigRat(1))
+                c.comps[i] = fconst(c.comps[i].dom, Rat(1))
             end
             dc = deriv(c)
             @test iszero(dc)
 
             # Linear functions
-            f0 = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
+            f0 = zeros(Form{D,R,Dual,Rat,Rat}, dom)
             for (i,fi) in f0.comps, dir in 1:D
-                f = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
+                f = zeros(Form{D,R,Dual,Rat,Rat}, dom)
                 f.comps[i] = sample(x->x[dir], f.comps[i].dom)
                 df = deriv(f)
                 for (j,dfj) in df.comps
@@ -228,14 +229,14 @@ function testForms()
                     else
                         s = 0
                     end
-                    rc = sample(x->BigRat(s), dfj.dom)
+                    rc = sample(x->Rat(s), dfj.dom)
                     @test dfj == rc
                 end
             end
 
             # Stokes's theorem
             for (i,fi) in f0.comps, dir in 1:D
-                f = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
+                f = zeros(Form{D,R,Dual,Rat,Rat}, dom)
                 f.comps[i] = sample(x->x[dir], f.comps[i].dom)
                 df = deriv(f)
                 bf = boundary(f)
@@ -244,13 +245,13 @@ function testForms()
 
             # Leibniz rule
             for (i,fi) in f0.comps, idir in 1:D
-                f = zeros(Form{D,R,Dual,BigRat,BigRat}, dom)
+                f = zeros(Form{D,R,Dual,Rat,Rat}, dom)
                 f.comps[i] = sample(x->x[idir], f.comps[i].dom)
                 RJ = D - R - 1
                 DualJ = false # false:true
-                g0 = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
+                g0 = zeros(Form{D,RJ,DualJ,Rat,Rat}, dom)
                 for (j,gj) in g0.comps, jdir in 1:D
-                    g = zeros(Form{D,RJ,DualJ,BigRat,BigRat}, dom)
+                    g = zeros(Form{D,RJ,DualJ,Rat,Rat}, dom)
                     g.comps[j] = sample(x->x[jdir], g.comps[j].dom)
                     # Why does s=1 always work? Is the result always
                     # zero?
@@ -261,11 +262,10 @@ function testForms()
                 end
             end
 
-            @warn "1:10"
-            for n in 1:1
-                a = rand(bigrange)
-                f = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
-                f2 = rand(bigrange, Form{D,R,Dual,BigRat,BigRat}, dom)
+            for n in 1:10
+                a = rand(ratrange)
+                f = rand(ratrange, Form{D,R,Dual,Rat,Rat}, dom)
+                f2 = rand(ratrange, Form{D,R,Dual,Rat,Rat}, dom)
 
                 if R <= D - 2
                     @test iszero(deriv(deriv(f)))
@@ -281,22 +281,11 @@ function testForms()
                 # Leibniz rule
                 RJ = D - R - 1
                 DualJ = false # false:true
-                g = rand(bigrange, Form{D,RJ,DualJ,BigRat,BigRat}, dom)
-                s = iseven(R) ? -1 : 1
-                # if (D,R) == (2,1) || (D,R) == (3,1)
-                #     s = 1
-                # elseif (D,R) == (1,0) || (D,R) == (2,0) || (D,R) == (3,0) || (D,R) == (3,2) || (D,R) == (4,0)
-                #     s = -1
-                # else
-                #     @assert false
-                # end
-                @show (D, lorentzian) (R, Dual) (RJ, DualJ) s
+                g = rand(ratrange, Form{D,RJ,DualJ,Rat,Rat}, dom)
+                s = bitsign(R+1)
                 @test (integral(wedge(deriv(f), g)) ==
                        s * integral(wedge(f, deriv(g))) +
                        integral(boundary(wedge(f, g))))
-                @assert (integral(wedge(deriv(f), g)) ==
-                         s * integral(wedge(f, deriv(g))) +
-                         integral(boundary(wedge(f, g))))
             end
 
         end
@@ -387,9 +376,8 @@ function testForms()
 
     @testset "Forms.Operators D=$D lorentzian=$lorentzian" for D in 1:4,
             lorentzian in [false]   # false:true
-        BigRat = Rational{BigInt}
-        dom = Domain{D,BigRat}(ntuple(d->d+2, D), lorentzian = lorentzian)
-        f = Form(Dict(() => Fun(dom, BigRat.(rand(-100:100, dom.n.elts)))))
+        dom = Domain{D,Rat}(ntuple(d->d+2, D), lorentzian = lorentzian)
+        f = Form(Dict(() => Fun(dom, Rat.(rand(-100:100, dom.n.elts)))))
 
         # Star
 

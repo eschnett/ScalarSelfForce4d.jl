@@ -45,4 +45,8 @@ plot((x,y)->pot(Vec((Double64(x),Double64(y)))), -1, 1, -1, 1)
 * Ari Stern, https://www.newton.ac.uk/seminar/20190930143015301,
   minute 20: hamiltonian, conserved symplected 2-form
 * Melvin Leok, https://www.newton.ac.uk/seminar/20191001110012001:
-  variational integrators, spacetime discretizations, Lie groups, etc.
+  variational integrators, spacetime discretizations, multisymplectic
+  relations, Lie groups, etc.
+* Snorre Christiansen,
+  https://www.newton.ac.uk/seminar/20191001143015301: modify
+  langangian to be invariant under group action
