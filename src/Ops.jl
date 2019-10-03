@@ -152,6 +152,39 @@ function Base.one(::Type{Op{D,T,U}},
     Op{D,T,U}(domi, domj, mat)
 end
 
+export shift
+function shift(::Type{Op{D,T,U}}, domi::Domain{D,T}, domj::Domain{D,T},
+               di::Vec{D,Int})::Op{D,T,U} where {D,T,U}
+    ni = domi.n
+    stri = strides(ni)
+    leni = prod(ni)
+    idxi(i::CartesianIndex{D}) = 1 + sum((i[d] - 1) * stri[d] for d in 1:D)
+    nj = domj.n
+    strj = strides(nj)
+    lenj = prod(nj)
+    idxj(j::CartesianIndex{D}) = 1 + sum((j[d] - 1) * strj[d] for d in 1:D)
+
+    n = min.(ni, nj)
+    I = Int[]
+    J = Int[]
+    V = U[]
+    sizehint!(I, prod(n))
+    sizehint!(J, prod(n))
+    sizehint!(V, prod(n))
+    function ins!(i, j, v)
+        push!(I, idxi(i))
+        push!(J, idxj(j))
+        push!(V, v)
+    end
+    for i in CartesianIndices(n.elts)
+        if all(i.I .+ di.elts .>= 1) && all(i.I .+ di.elts .<= n.elts)
+            ins!(i + CartesianIndex(di.elts), i, U(1))
+        end
+    end
+    mat = sparse(I, J, V, leni, lenj)
+    Op{D,T,U}(domi, domj, mat)
+end
+
 function Base.:*(op::Op{D,T,U}, rhs::Fun{D,T,U})::Fun{D,T,U} where {D,T,U}
     @assert op.domj == rhs.dom
 
@@ -196,10 +229,8 @@ end
 
 
 
-# Note: These work for boundary conditions, but not for initial
-# conditions. The matrices / RHS vectors have rows that are off by one
-# for initial conditions.
 export mix_op_bc
+
 function mix_op_bc(bnd::Op{D,T,U},
                    iop::Op{D,T,U}, bop::Op{D,T,U})::Op{D,T,U} where
         {D,T <: Number,U}
@@ -207,11 +238,17 @@ function mix_op_bc(bnd::Op{D,T,U},
     domj = bnd.domj
     @assert iop.domi == domi && iop.domj == domj
     @assert bop.domi == domi && bop.domj == domj
+    @assert domi.metric == domj.metric
+
+    di = Vec{D,Int}(ntuple(d -> domi.metric[d] < 0 ? 1 : 0, D))
+    sh = shift(Op{D,T,U}, domi, domj, di)
 
     id = one(Op{D,T,U}, domi, domj)
-    int = id - bnd
-    int * iop + bnd * bop
+    int = one - bnd
+
+    int * sh * iop + bnd * bop
 end
+
 function mix_op_bc(bnd::Op{D,T,U},
                    rhs::Fun{D,T,U}, bvals::Fun{D,T,U})::Fun{D,T,U} where
         {D,T <: Number,U}
@@ -219,10 +256,15 @@ function mix_op_bc(bnd::Op{D,T,U},
     domj = bnd.domj
     @assert rhs.domi == domi && rhs.domj == domj
     @assert bvals.domi == domi && bvals.domj == domj
+    @assert domi.metric == domj.metric
 
+    di = Vec{D,Int}(ntuple(d -> domi.metric[d] < 0 ? 1 : 0, D))
+    sh = shift(Op{D,T,U}, domi, domj, di)
     id = one(Op{D,T,U}, domi, domj)
+
     int = id - bnd
-    int * rhs + bnd * bvals
+
+    int * sh * rhs + bnd * bvals
 end
 
 end

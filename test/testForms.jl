@@ -310,6 +310,13 @@ function testForms()
                 @test integral(wedge(z, star(z))) == 0
             end
         end
+
+        for R in 0:D, Dual in false:true
+            f = rand(ratrange, Form{D,R,Dual,Rat,Rat}, dom)
+            sf = star(f)
+            ops = star(Val(R), Val(Dual), dom)
+            @test sf == ops * f
+        end
     end
 
     @testset "Forms.Derivatives D=$D" for D in 1:4, lorentzian in [false]
@@ -430,6 +437,11 @@ function testForms()
                     @test i1 == i2 + i3 || i1 == -i2 + i3
                 end
             end
+
+            f = rand(ratrange, Form{D,R,Dual,Rat,Rat}, dom)
+            df = deriv(f)
+            opd = deriv(Val(R), Val(Dual), dom)
+            @test df == opd * f
 
         end
     end

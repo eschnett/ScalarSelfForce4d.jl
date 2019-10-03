@@ -308,6 +308,22 @@ function Base.one(::Type{FOp{D,R,Dual,R,Dual,T,U}},
     FOp{D,R,Dual,R,Dual,T,U}(comps)
 end
 
+function Ops.shift(::Type{FOp{D,R,Dual,R,Dual,T,U}}, dom::Domain{D,T},
+                   di::Vec{D,Int})::FOp{D,R,Dual,R,Dual,T,U} where
+        {D,R,Dual,T,U}
+    comps = Dict{Vec{R,Int},Dict{Vec{R,Int},Op{D,T,U}}}()
+    for staggeredc in CartesianIndices(ntuple(d->0:1, D))
+        staggered = Vec{D,Bool}(ntuple(d->Bool(staggeredc[d]), D))
+        if count(staggered) == R
+            idx = Vec{R,Int}(Tuple(staggered2idx(staggered)))
+            fdom = makestaggered(makedual(dom, Dual), staggered)
+            op = shift(Op{D,T,U}, fdom, fdom, di)
+            comps[idx] = Dict(idx => op)
+        end
+    end
+    FOp{D,R,Dual,R,Dual,T,U}(comps)
+end
+
 function Base.:*(A::FOp{D,RI,DualI,RJ,DualJ,T,U},
                  f::Form{D,RJ,DualJ,T,U})::Form{D,RI,DualI,T,U} where
         {D,RI,DualI,RJ,DualJ,T,U}
@@ -529,8 +545,12 @@ function boundary(::Val{0}, ::Val{false},
         push!(J, idx(j))
         push!(V, v)
     end
+    # Choose initial conditions for timelike and boundary conditions
+    # for spacelike directions
+    b1 = Vec{D,Int}(ntuple(d -> 1, D))
+    b2 = Vec{D,Int}(ntuple(d -> dom.metric[d] < 0 ? 2 : n[d], D))
     for i in CartesianIndices(dom.n.elts)
-        if any(i.I .== 1) || any(i.I .== n.elts)
+        if any(i.I .== b1.elts) || any(i.I .== b2.elts)
             ins!(i, i, T(1))
         end
     end
@@ -721,6 +741,7 @@ end
 export star
 
 # star[k] ∘ star[n-k] = (-1)^(k (n-k))   [only for Euclidean manifolds?]
+
 function star(form::Form{D,R,Dual,T,U})::Form{D,D - R,!Dual,T,U} where
         {D,R,Dual,T <: Number,U}
     @assert D >= 0
@@ -784,7 +805,7 @@ function star(::Val{R}, ::Val{Dual},
             dx = spacing(rdom)
             oidx = Vec{R,Int}(Tuple(staggered2idx(odom.staggered)))
             ridx = Vec{D - R,Int}(Tuple(staggered2idx(rdom.staggered)))
-            s = levicivita([oidx..., ridx...])
+            s = levicivita([oidx..., ridx...]) * prod(dom.metric[oidx])
             scale = prod(!rdom.staggered[d] ? inv(dx[d]) : dx[d] for d in 1:D)
 
             for i in CartesianIndices(ni.elts)
@@ -891,14 +912,26 @@ function laplace(form::Form{D,R,Dual,T,U})::Form{D,R,Dual,T,U} where
         {D,R,Dual,T <: Number,U}
     @assert R == 0              # TODO: Add deriv ∘ coderiv
     # TODO: Improve performance
-    coderiv(deriv(form))
+    r = zeros(Form{D,R,Dual,T,U}, form.dom)
+    if R > 0
+        r += deriv(coderiv(form))
+    end
+    if R < D
+        r += coderiv(deriv(form))
+    end
+    r
 end
 function laplace(::Val{R}, ::Val{Dual},
                  dom::Domain{D,T})::FOp{D,R,Dual,R,Dual,T,T} where
         {R,Dual,D,T <: Number}
-    @assert R == 0
-    (coderiv(Val(R + 1), Val(Dual), dom) *
-     deriv(Val(R), Val(Dual), dom))
+    op = zero(FOp{D,R,Dual,R,Dual,T,T})
+    if R > 0
+        op += deriv(Val(R-1), Val(Dual), dom) * coderiv(Val(R), Val(Dual), dom)
+    end
+    if R < D
+        op += coderiv(Val(R+1), Val(Dual), dom) * deriv(Val(R), Val(Dual), dom)
+    end
+    op
 end
 
 
@@ -911,10 +944,15 @@ function Ops.mix_op_bc(bnd::FOp{D,R,Dual,R,Dual,T,U},
                        bop::FOp{D,R,Dual,R,Dual,T,U},
                        dom::Domain{D,T})::FOp{D,R,Dual,R,Dual,T,U} where
         {D,R,Dual,T,U}
+    di = Vec{D,Int}(ntuple(d -> dom.metric[d] < 0 ? 1 : 0, D))
+    sh = shift(typeof(bnd), dom, di)
+
     id = one(typeof(bnd), dom)
     int = id - bnd
-    int * iop + bnd * bop
+
+    int * sh * iop + bnd * bop
 end
+
 function Ops.mix_op_bc(bnd::FOp{D,R,Dual,R,Dual,T,U},
                        rhs::Form{D,R,Dual,T,U},
                        bvals::Form{D,R,Dual,T,U})::Form{D,R,Dual,T,U} where
@@ -922,9 +960,13 @@ function Ops.mix_op_bc(bnd::FOp{D,R,Dual,R,Dual,T,U},
     dom = rhs.dom
     @assert bvals.dom == dom
 
+    di = Vec{D,Int}(ntuple(d -> dom.metric[d] < 0 ? 1 : 0, D))
+    sh = shift(typeof(bnd), dom, di)
+
     id = one(typeof(bnd), dom)
     int = id - bnd
-    int * rhs + bnd * bvals
+
+    int * sh * rhs + bnd * bvals
 end
 
 

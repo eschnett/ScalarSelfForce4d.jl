@@ -56,7 +56,7 @@ function testPoisson()
         @test maxres < 1.0e-12
     end
 
-    @testset "Scalar wave equation" begin
+    @testset "Scalar wave equation, explicitly" begin
         pot = zeros(Form{4,0,false,Float64,Float64}, ldom(4))
         # This is weird on the boundaries and thus does not conserve
         # energy
@@ -95,6 +95,25 @@ function testPoisson()
         # # etot = 14.804406601634037
         # @test isapprox(minimum(etot), 18.071224176938696; atol=1.0e-6)
         # @test isapprox(maximum(etot), 22.494721301641462; atol=1.0e-6)
+    end
+
+    @testset "Scalar wave equation" begin
+        pot = zeros(Form{4,0,false,Float64,Float64}, ldom(4))
+        bvals = Form(Dict(() => sample(waveD, ldom(4))))
+
+        dal = laplace(Val(0), Val(false), ldom(4))
+        dir = dirichlet(Val(0), Val(false), ldom(4))
+
+        bnd = boundary(Val(0), Val(false), ldom(4))
+        op = mix_op_bc(bnd, dal, dir, ldom(4))
+        rhs = mix_op_bc(bnd, pot, bvals)
+        sol = op \ rhs
+        sol0 = solve_dAlembert_Dirichlet(pot, bvals)
+        @test norm((sol - sol0)[()], Inf) <= 1.0e-12
+
+        err = sol - bvals
+        maxerr = norm(err[()], Inf)
+        @test isapprox(maxerr, 0.02824254256516323; atol=1.0e-6)
     end
 
     # R(du) = R(v)
