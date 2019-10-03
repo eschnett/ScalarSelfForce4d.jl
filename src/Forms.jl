@@ -620,75 +620,100 @@ export wedge
     end # quote
 end
 
-function wedge(f::Form{D,RI,false,T,U},
-               g::Form{D,RJ,true,T,U})::Form{D,RI+RJ,false,T,U} where
-        {D,RI,RJ,T,U}
+@generated function wedge(
+        f::Form{D,RI,false,T,U},
+    g::Form{D,RJ,true,T,U})::Form{D,RI+RJ,false,T,U} where {D,RI,RJ,T,U}
     R = RI + RJ
-    dom = f.dom
-    @assert makeunstaggered(makeprimal(g.dom)) == dom
-    di = ntuple(dir->CartesianIndex(ntuple(d->d == dir, D)), D)
-
-    rcomps = Dict{Vec{R,Int}, Fun{D,T,U}}()
-    # Loop over all components of the result
-    for rstagc in CartesianIndices(ntuple(d->0:1, D))
-        rstag = Vec{D,Bool}(ntuple(d->Bool(rstagc[d]), D))
-        if count(rstag) == R
-            ridx = Vec{R,Int}(Tuple(staggered2idx(rstag)))
-            rdom = makestaggered(dom, rstag)
-            rc = Array{U}(undef, rdom.n.elts)
-            # Loop over all R-cells
-            for i in CartesianIndices(size(rc))
-                rci = U(0)
-                # Loop over all contributing components of f and g
-                for fstagc in CartesianIndices(ntuple(d->0:1, D))
-                    fstag = Vec{D,Bool}(ntuple(d->Bool(fstagc[d]), D))
-                    if all(~fstag | rstag) && count(fstag) == RI
-                        gstag = rstag & ~fstag
-                        @assert count(gstag) == RJ
-                        @assert all(~ (fstag & gstag))
-                        @assert all(fstag | gstag == rstag)
-                        fidx = Vec{RI,Int}(Tuple(staggered2idx(fstag)))
-                        gidx = Vec{RJ,Int}(Tuple(staggered2idx(gstag)))
-                        qidx = Int[fidx..., gidx...]
-                        s = levicivita(sortperm(qidx))
-                        @assert abs(s) == 1
-                        # Loop over all vertices of the R-cell
-                        dirange = ntuple(d -> 0 : Int(rstag[d]), D)
-                        for di in CartesianIndices(dirange)
-                            # Loop over all contributing cells
-                            fdi = CartesianIndex(ntuple(d -> fstag[d] ? 0 : di[d], D))
-                            gdirange = ntuple(D) do d
-                                if !rstag[d] & gstag[d]
-                                    di[d]:di[d]
-                                elseif !rstag[d] & !gstag[d]
-                                    @assert di[d] == 0
-                                    -1:0
-                                elseif rstag[d] & gstag[d]
-                                    di[d]:di[d]
-                                elseif rstag[d] & !gstag[d]
-                                    0:0
-                                else
-                                    @assert false
-                                end
-                            end
-                            rcg = U(0)
-                            c = 0
-                            for gdi in CartesianIndices(gdirange)
-                                if all(!rstag[d] & !gstag[d] ? 1 <= i[d] + gdi[d] <= size(g[gidx].coeffs,d) : true for d in 1:D)
-                                    rcg += f[fidx][i + fdi] * g[gidx][i + gdi]
-                                    c += 1
-                                end
-                            end
-                            rci += s * rcg / c
-                        end
-                    end
-                end
-                rc[i] = rci / 2^R
-            end
-            rcomps[ridx] = Fun{D,T,U}(rdom, rc)
-        end
-    end
-    Form(rcomps)
+    mksym(sym, inds) = Symbol(sym, [Symbol("_", i) for i in inds]...)
+    quote
+        dom = f.dom
+        @assert makeunstaggered(makeprimal(g.dom)) == dom
+        $([begin
+            fstag = Vec{D,Bool}(ntuple(d->Bool(fstagc[d]), D))
+            if count(fstag) == RI
+                fidx = Vec{RI,Int}(Tuple(staggered2idx(fstag)))
+                quote
+                    $(mksym(:fcomps, fidx)) = f[$fidx]
+                end # quote
+            end # if
+        end for fstagc in CartesianIndices(ntuple(d->0:1, D))]...)
+        $([begin
+            gstag = Vec{D,Bool}(ntuple(d->Bool(gstagc[d]), D))
+            if count(gstag) == RJ
+                gidx = Vec{RJ,Int}(Tuple(staggered2idx(gstag)))
+                quote
+                    $(mksym(:gcomps, gidx)) = g[$gidx]
+                end # quote
+            end # if
+        end for gstagc in CartesianIndices(ntuple(d->0:1, D))]...)
+        rcomps = Dict{Vec{$R,Int}, Fun{D,T,U}}()
+        # Loop over all components of the result
+        $([begin
+            rstag = Vec{D,Bool}(ntuple(d->Bool(rstagc[d]), D))
+            if count(rstag) == R
+                ridx = Vec{R,Int}(Tuple(staggered2idx(rstag)))
+                quote
+                    rdom = makestaggered(dom, $rstag)
+                    rc = Array{U}(undef, rdom.n.elts)
+                    # Loop over all R-cells
+                    for i in CartesianIndices(size(rc))
+                        rci = U(0)
+                        # Loop over all contributing components of f and g
+                        $([begin
+                            fstag = Vec{D,Bool}(ntuple(d->Bool(fstagc[d]), D))
+                            if all(~fstag | rstag) && count(fstag) == RI
+                                gstag = rstag & ~fstag
+                                @assert count(gstag) == RJ
+                                @assert all(~ (fstag & gstag))
+                                @assert all(fstag | gstag == rstag)
+                                fidx = Vec{RI,Int}(Tuple(staggered2idx(fstag)))
+                                gidx = Vec{RJ,Int}(Tuple(staggered2idx(gstag)))
+                                qidx = Int[fidx..., gidx...]
+                                s = levicivita(sortperm(qidx))
+                                @assert abs(s) == 1
+                                # Loop over all vertices of the R-cell
+                                dirange = ntuple(d -> 0 : Int(rstag[d]), D)
+                                quote
+                                    $([begin
+                                        # Loop over all contributing cells
+                                        fdi = CartesianIndex(ntuple(d -> fstag[d] ? 0 : di[d], D))
+                                        gdirange = ntuple(D) do d
+                                            if !rstag[d] & gstag[d]
+                                                di[d]:di[d]
+                                            elseif !rstag[d] & !gstag[d]
+                                                @assert di[d] == 0
+                                                -1:0
+                                            elseif rstag[d] & gstag[d]
+                                                di[d]:di[d]
+                                            elseif rstag[d] & !gstag[d]
+                                                0:0
+                                            else
+                                                @assert false
+                                            end
+                                        end
+                                        quote
+                                            rcg = U(0)
+                                            c = 0
+                                            $([quote
+                                                if (&)($([!rstag[d] & !gstag[d] ? :(1 <= i[$d] + $gdi[$d] <= size($(mksym(:gcomps, gidx)).coeffs,$d)) : :(true) for d in 1:D]...))
+                                                    rcg += $(mksym(:fcomps, fidx))[i + $fdi] * $(mksym(:gcomps, gidx))[i + $gdi]
+                                                    c += 1
+                                                end # if
+                                            end for gdi in CartesianIndices(gdirange)]...)
+                                            rci += $s * rcg / c
+                                        end # quote
+                                   end for di in CartesianIndices(dirange)]...)
+                               end # quote
+                            end # if
+                        end for fstagc in CartesianIndices(ntuple(d->0:1, D))]...)
+                        rc[i] = rci / 2^$R
+                    end # for i
+                    rcomps[$ridx] = Fun{D,T,U}(rdom, rc)
+                end # quote
+            end # if
+       end for rstagc in CartesianIndices(ntuple(d->0:1, D))]...)
+       Form(rcomps)
+    end # quote
 end
 
 
