@@ -41,14 +41,24 @@ plot((x,y)->pot(Vec((Double64(x),Double64(y)))), -1, 1, -1, 1)
 
 * Douglas N. Arnold: Finite element exterior calculus.
   http://www-users.math.umn.edu/~arnold/feec-cbms/index.html
+* Nathan Bell, Anil N. Hirani: PyDEC: Software and Algorithms for
+  Discretization of Exterior Calculus. arXiv:1103.3076 [cs.NA].
+* https://fenicsproject.org : large, complex package, probably only 2d
+  and 3d.
+* https://github.com/hirani/pydec : python, arbitrary dimension, DEC:
+  seems good! unmaintained?
 
 * Ari Stern, https://www.newton.ac.uk/seminar/20190930143015301,
   minute 20: hamiltonian, conserved symplected 2-form
-* Melvin Leok, https://www.newton.ac.uk/seminar/20191001110012001:
+* Melvin Leok, https://www.newton.ac.uk/seminar/20191001110012001 :
   variational integrators, spacetime discretizations, multisymplectic
   relations, Lie groups, etc.
 * Snorre Christiansen,
-  https://www.newton.ac.uk/seminar/20191001143015301: modify
+  https://www.newton.ac.uk/seminar/20191001143015301 : modify
   langangian to be invariant under group action. Finite elements for
   manifolds with curvature, from first steps, different (?) from cell
   complexes, inspired by elasticity.
+* Anil Hirani, https://www.newton.ac.uk/seminar/20191002093010301 :
+  similar to de-Rham complex, but D^2 = Riemann instead of 0; basic
+  exposition of DEC. definition of curvature on a simplex by moving
+  edges/faces to common corner.

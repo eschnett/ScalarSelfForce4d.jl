@@ -6,6 +6,63 @@ using Memoize
 
 
 
+function Base.getindex(x::Vec{D,T}, perm::Vector)::Vec{D,T} where {D, T}
+    Vec{D,T}(x.elts[perm])
+end
+
+function Base.getindex(dom::Domain{D,T}, perm::Vector)::Domain{D,T} where {D, T}
+    Domain{D,T}(dom.dual,
+                dom.staggered[perm],
+                dom.n[perm],
+                dom.metric[perm],
+                dom.xmin[perm],
+                dom.xmax[perm])
+end
+
+function Base.permutedims(f::Form{D,R,Dual,T,U}, perm)::Form{D,R,Dual,T,U} where
+        {D,R,Dual,T,U}
+    rd = Dict{Vec{R,Int}, Fun{D,T,U}}()
+    for (i,fi) in f.comps
+        iperm = zeros(Int, length(perm))
+        iperm[perm] = collect(1:length(perm))
+        @assert perm[iperm] == collect(1:length(perm))
+        ju = Vec{R,Int}(Tuple(map(d->iperm[d], i)))
+        jp = sortperm(ju)
+        s = levicivita(jp)
+        j = ju[jp]
+        rdom = fi.dom[perm]
+        rcoeffs = s * permutedims(fi.coeffs, perm)
+        @assert rdom.n.elts == size(rcoeffs)
+        rd[j] = Fun(rdom, rcoeffs)
+    end
+    Form(rd)
+end
+
+function Base.reverse(f::Form{D,R,Dual,T,U}; dims)::Form{D,R,Dual,T,U} where
+        {D,R,Dual,T,U}
+    rd = Dict{Vec{R,Int}, Fun{D,T,U}}()
+    for (i,fi) in f.comps
+        rd[i] = Fun(fi.dom, reverse(fi.coeffs, dims=dims))
+    end
+    Form(rd)
+end
+
+function isabsequal(f::Form{D,R,Dual,T,U}, g::Form{D,R,Dual,T,U})::Bool where
+        {D,R,Dual,T,U}
+    eq = true
+    for (i,fi) in f.comps
+        gi = g[i]
+        if !(isequal(fi, gi) || isequal(fi, -gi))
+            @show i f g
+            @assert false
+        end
+        eq &= isequal(fi, gi) || isequal(fi, -gi)
+    end
+    eq
+end
+
+
+
 @generated function dsinpiD(x::Vec{D,T}, dir::Int)::T where {D,T}
     quote
         $([quote
@@ -14,8 +71,7 @@ using Memoize
                                :(pi * cospi(x[$d])) :
                                :(sinpi(x[$d])) for d in 1:D]...))
             end
-        end
-           for dir1 in 1:D]...)
+        end for dir1 in 1:D]...)
         T(0)
     end
 end
@@ -103,12 +159,11 @@ function testForms()
     @testset "Forms.Wedge D=$D lorentzian=$lorentzian" for D in 1:4, lorentzian in [false]
         dom = Domain{D,Rat}(ntuple(d->d+2, D), lorentzian=lorentzian)
         for RI in 0:D, RJ in 0:D - RI, DualI in false:true, DualJ in false:true
+            # we test all primal-primal and primal-dual operations
+            !DualI || continue
+
             f0 = zeros(Form{D,RI,DualI,Rat,Rat}, dom)
             g0 = zeros(Form{D,RJ,DualJ,Rat,Rat}, dom)
-    
-            # we test all primal-primal as well as certain primal-dual
-            # operations
-            (!DualI && !DualJ) || (!DualI && DualJ && RI + RJ == D) || continue
     
             # Unit vectors
             for (i,fi) in f0.comps, (j,gj) in g0.comps
@@ -118,26 +173,54 @@ function testForms()
                     s = 0
                 else
                     ij = Int[i..., j...]
-                    s = 1
-                    while !isempty(ij)
-                        y,x = findmin(ij)
-                        if iseven(x)
-                            s = -s
-                        end
-                        deleteat!(ij, x)
-                    end
+                    ijp = sortperm(ij)
+                    s = levicivita(ijp)
                 end
                 k = Vec{RI+RJ,Int}(Tuple(sort(Int[i..., j...])))
                 f = zeros(Form{D,RI,DualI,Rat,Rat}, dom)
                 g = zeros(Form{D,RJ,DualJ,Rat,Rat}, dom)
                 h = zeros(Form{D,RI+RJ,false,Rat,Rat}, dom)
-                f.comps[i] = fconst(f.comps[i].dom, Rat(1))
+                # f.comps[i] = fconst(f.comps[i].dom, Rat(1))
                 g.comps[j] = fconst(g.comps[j].dom, Rat(1))
+                primes = (2, 3, 5, 7, 11, 13, 17, 19)
+                cfun(x) = sum(primes[d] * x[d] for d in 1:D)
+                f.comps[i] = Fun(f.comps[i].dom, Rat[cfun(coord(f.comps[i].dom, Vec(ntuple(d -> idx[d]-1 + istag[d]//2, D)))) for idx in CartesianIndices(f.comps[i].dom.n.elts)])
                 if s != 0
-                    h.comps[k] = fconst(h.comps[k].dom, Rat(s))
+                    # h.comps[k] = fconst(h.comps[k].dom, Rat(s))
+                    h.comps[k] = Fun(h.comps[k].dom, Rat[s * cfun(coord(h.comps[k].dom, Vec(ntuple(d -> idx[d]-1 + (istag|jstag)[d]//2, D)))) for idx in CartesianIndices(h.comps[k].dom.n.elts)])
                 end
                 r = wedge(f, g)
                 @test r == h
+
+                # Symmetry under reflections of the domain
+                for dir in 1:D
+                    fg = wedge(f, g)
+                    fr = reverse(f, dims=dir)
+                    gr = reverse(g, dims=dir)
+                    frgr = wedge(fr, gr)
+                    fgr = reverse(fg, dims=dir)
+                    @test isabsequal(fgr, frgr)
+                end
+
+                # Symmetry under rotations of the domain
+                if D >= 2
+                    fg = wedge(f, g)
+
+                    perm = [2, 1, (3:D)...]
+                    fp = permutedims(f, perm)
+                    gp = permutedims(g, perm)
+                    fpgp = wedge(fp, gp)
+                    fgp = permutedims(fg, perm)
+                    @test isabsequal(fgp, fpgp)
+
+                    perm = [(2:D)..., 1]
+                    fp = permutedims(f, perm)
+                    gp = permutedims(g, perm)
+                    fpgp = wedge(fp, gp)
+                    fgp = permutedims(fg, perm)
+                    @test isabsequal(fgp, fpgp)
+                end
+
             end
     
             for n in 1:10
@@ -165,6 +248,35 @@ function testForms()
                     end
                     s = Rat(bitsign(RI * RJ))
                     @test isequal(wedge(g, f), s * wedge(f, g))
+                end
+
+                # Symmetry under reflections of the domain
+                for dir in 1:D
+                    fg = wedge(f, g)
+                    fr = reverse(f, dims=dir)
+                    gr = reverse(g, dims=dir)
+                    frgr = wedge(fr, gr)
+                    fgr = reverse(fg, dims=dir)
+                    @test isabsequal(fgr, frgr)
+                end
+
+                # Symmetry under rotations of the domain
+                if D >= 2
+                    fg = wedge(f, g)
+
+                    perm = [2, 1, (3:D)...]
+                    fp = permutedims(f, perm)
+                    gp = permutedims(g, perm)
+                    fpgp = wedge(fp, gp)
+                    fgp = permutedims(fg, perm)
+                    @test isabsequal(fgp, fpgp)
+
+                    perm = [(2:D)..., 1]
+                    fp = permutedims(f, perm)
+                    gp = permutedims(g, perm)
+                    fpgp = wedge(fp, gp)
+                    fgp = permutedims(fg, perm)
+                    @test isabsequal(fgp, fpgp)
                 end
             end
         end
@@ -243,10 +355,11 @@ function testForms()
                 @test integral(df) == integral(bf)
             end
 
-            # Leibniz rule
             for (i,fi) in f0.comps, idir in 1:D
                 f = zeros(Form{D,R,Dual,Rat,Rat}, dom)
                 f.comps[i] = sample(x->x[idir], f.comps[i].dom)
+
+                # Leibniz rule
                 RJ = D - R - 1
                 DualJ = false # false:true
                 g0 = zeros(Form{D,RJ,DualJ,Rat,Rat}, dom)
@@ -259,6 +372,20 @@ function testForms()
                     @test (integral(wedge(deriv(f), g)) ==
                            s * integral(wedge(f, deriv(g))) +
                            integral(boundary(wedge(f, g))))
+                end
+
+                # Leibniz rule
+                RK = R + 1
+                DualK = false # false:true
+                if 0 <= R <= D-1 && 1 <= RK <= D
+                    h0 = zeros(Form{D,RK,DualK,Rat,Rat}, dom)
+                    for (k,hk) in h0.comps, kdir in 1:D
+                        h = zeros(Form{D,RK,DualK,Rat,Rat}, dom)
+                        h.comps[k] = sample(x->x[kdir], h.comps[k].dom)
+                        @test (integral(wedge(deriv(f), star(h))) ==
+                               integral(wedge(f, star(coderiv(h)))) +
+                               integral(boundary(wedge(f, star(h)))))
+                    end
                 end
             end
 
@@ -286,6 +413,22 @@ function testForms()
                 @test (integral(wedge(deriv(f), g)) ==
                        s * integral(wedge(f, deriv(g))) +
                        integral(boundary(wedge(f, g))))
+
+                # Leibniz rule
+                RK = R + 1
+                DualK = false # false:true
+                if 0 <= R <= D-1 && 1 <= RK <= D
+                    h = rand(ratrange, Form{D,RK,DualK,Rat,Rat}, dom)
+                    i1 = integral(wedge(deriv(f), star(h)))
+                    i2 = integral(wedge(f, star(coderiv(h))))
+                    i3 = integral(boundary(wedge(f, star(h))))
+                    if !(i1 == i2 + i3 || i1 == -i2 + i3)
+                        @show (D, lorentzian) (R, Dual) (RK, DualK)
+                        @show i1 i2 i3
+                        @assert false
+                    end
+                    @test i1 == i2 + i3 || i1 == -i2 + i3
+                end
             end
 
         end

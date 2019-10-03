@@ -97,6 +97,11 @@ function testPoisson()
         # @test isapprox(maximum(etot), 22.494721301641462; atol=1.0e-6)
     end
 
+    # R(du) = R(v)
+    #    int(du ∧ *v) = int(u ∧ *δv) + δint(u ∧ *v)
+    # v = du
+    #    int(du ∧ *du) = int(u ∧ *δdu) + δint(u ∧ *du)
+
     @testset "Scalar wave equation with eigenmode" begin
         lap3 = laplace(Val(0), Val(false), dom(3))
         dir3 = dirichlet(Val(0), Val(false), dom(3))
